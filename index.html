@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulate Mobile Scroll</title>
+    <style>
+        body,
+        html {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            /* Ensure no scrollbars are shown */
+        }
+
+        .content {
+            height: 200%;
+            background: linear-gradient(to bottom, red, yellow);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="content">
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+        <div style="margin-top: 200px">12312 1</div>
+    </div>
+    <script>
+        let startY;
+        let lastY;
+        let lastTime;
+        let velocity = 0;
+        let animationFrameId;
+
+        const updateScroll = (deltaY) => {
+            window.scrollBy(0, deltaY);
+        };
+
+        const animateScroll = () => {
+            if (Math.abs(velocity) > 0.1) {
+                updateScroll(velocity);
+                velocity *= 0.95; // Gradually decrease the velocity (simulate friction)
+                animationFrameId = requestAnimationFrame(animateScroll);
+            } else {
+                cancelAnimationFrame(animationFrameId);
+            }
+        };
+
+        window.addEventListener('touchstart', (event) => {
+            startY = event.touches[0].pageY;
+            lastY = startY;
+            lastTime = Date.now();
+            velocity = 0;
+            cancelAnimationFrame(animationFrameId); // Stop any ongoing animations
+        }, { passive: false });
+
+        window.addEventListener('touchmove', (event) => {
+            const touchY = event.touches[0].pageY;
+            const currentTime = Date.now();
+            const deltaY = lastY - touchY;
+            const deltaTime = currentTime - lastTime;
+
+            if (deltaTime > 0) {
+                const currentVelocity = deltaY / deltaTime;
+                velocity = (velocity + currentVelocity) / 2; // Average the velocity for smoothness
+            }
+
+            lastY = touchY;
+            lastTime = currentTime;
+
+            updateScroll(deltaY);
+            event.preventDefault();
+        }, { passive: false });
+
+        window.addEventListener('touchend', () => {
+            if (Math.abs(velocity) > 0) {
+                animateScroll(); // Start the deceleration animation
+            }
+        }, { passive: false });
+
+    </script>
+</body>
+
+</html>
