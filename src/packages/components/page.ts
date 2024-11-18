@@ -1,15 +1,9 @@
-import { name } from "./name";
 import { ComponentApp } from "../types";
 
 export const page = (ctx: CanvasRenderingContext2D, screen: ComponentApp) => {
   const { x, y, width, height, cursor, backgroundColor, config } = screen;
   const { lineWidth, initScale, colorBorderHoverGroup } = config;
-
   const isHover = cursor.inScreen();
-
-  /*------- Name page -------*/
-  name(ctx, screen);
-  /*------- Name page -------*/
 
   /*------- Frame page -------*/
   ctx.save();
@@ -18,9 +12,10 @@ export const page = (ctx: CanvasRenderingContext2D, screen: ComponentApp) => {
   ctx.fillRect(x, y, width, height);
   if (isHover) {
     const lineW = lineWidth * initScale;
+    const half = lineW / 2;
     ctx.lineWidth = isHover ? lineWidth : 0;
     ctx.strokeStyle = colorBorderHoverGroup;
-    ctx.strokeRect(x - lineW / 2, y - lineW / 2, width + lineW, height + lineW);
+    ctx.strokeRect(x - half, y - half, width + lineW, height + lineW);
   }
   ctx.closePath();
   ctx.restore();

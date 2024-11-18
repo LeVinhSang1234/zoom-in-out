@@ -11,9 +11,10 @@ import {
   BACKGROUND_COLOR_MENU,
   FRAME_PIXEL_COLOR,
   SCALE_VISIBLE_FRAME,
-  DESIGN_MODE,
   INIT_SCALE,
   SIZE_GRID_SQUARE,
+  TITLE_PAGE_COLOR,
+  TITLE_PAGE_HOVER_COLOR,
 } from "../conts";
 
 export type CanvasContextValue = {
@@ -27,8 +28,9 @@ export type CanvasContextValue = {
   backgroundColor: string;
   backgroundColorMenu: string;
   framePixelColor: string;
+  titlePageColor: string;
+  titlePageHoverColor: string;
   scaleVisibleFrame: number;
-  designMode: boolean;
   initScale: number;
   sizeGridSquare: number;
 };
@@ -45,9 +47,10 @@ export const defaultValueContext: CanvasContextValue = {
   backgroundColorMenu: BACKGROUND_COLOR_MENU,
   framePixelColor: FRAME_PIXEL_COLOR,
   scaleVisibleFrame: SCALE_VISIBLE_FRAME,
-  designMode: DESIGN_MODE,
   initScale: INIT_SCALE,
   sizeGridSquare: SIZE_GRID_SQUARE,
+  titlePageColor: TITLE_PAGE_COLOR,
+  titlePageHoverColor: TITLE_PAGE_HOVER_COLOR,
 };
 
 export const CanvasContext =

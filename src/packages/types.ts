@@ -46,17 +46,17 @@ export type ComponentApp = {
   cursor: { inScreen: () => boolean };
   children?: ComponentApp[];
   type: ComponentAppType;
+  titleConfig: WindowSize & Pointer & { text: string };
 } & ComponentProps &
   ComponentBase & { config: CanvasContextValue };
 
 export type Zoom = {
   scale: number;
   worldOrigin: Pointer; // translate x và translate y. sẽ bằng rx
-  screenOrigin: Pointer;
+  screenOrigin: Pointer; // Tương đương mouse x và y nhưng chỉ đc set lại.= mouse x , y khi giữ phím ctr vị trí => drag tới vị trí;
   mouse: Pointer & {
     rx: number; // vị trí chuột x sau khi bị scale và translate so với thực tế
     ry: number; // vị trí chuột y sau khi bị scale và translate so với thực tế
-    button: number;
     bounds?: DOMRect;
     // x:  vị trí chuột x thực tế trên màn hình
     // y: vị trí chuột y thực tế trên màn hình

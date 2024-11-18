@@ -9,8 +9,9 @@ export const COLOR_BORDER_HOVER_GROUP = "#0d8be6";
 export const BACKGROUND_COLOR = "#343434";
 export const BACKGROUND_COLOR_MENU = "#2c2c2c";
 export const FRAME_PIXEL_COLOR = "#AAAAAA";
-export const SCALE_VISIBLE_FRAME = 50 * INIT_SCALE;
-export const DESIGN_MODE = true;
+export const TITLE_PAGE_COLOR = "#979797";
+export const TITLE_PAGE_HOVER_COLOR = "#76b6e4";
+export const SCALE_VISIBLE_FRAME = 10 * INIT_SCALE;
 export const SIZE_GRID_SQUARE = 1;
 
 export const base64Point =

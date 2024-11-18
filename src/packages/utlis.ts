@@ -13,7 +13,7 @@ import {
 
 export const isHoved = (
   contain: { x: number; y: number },
-  screen: ComponentApp
+  screen: { x: number; y: number; width: number; height: number }
 ) => {
   const { x: x1, y: y1, width: w1, height: h1 } = screen;
   const { x: x2, y: y2 } = contain;
@@ -41,11 +41,6 @@ export const zoomedY = (number: number, zoom: Zoom) => {
   // scale & origin Y
   return (number - worldOrigin.y) * scale + screenOrigin.y;
 };
-
-// Inverse does the reverse of a calculation. Like (3 - 1) * 5 = 10   the inverse is 10 * (1/5) + 1 = 3
-// multiply become 1 over ie *5 becomes * 1/5  (or just /5)
-// Adds become subtracts and subtract become add.
-// and what is first become last and the other way round.
 
 // inverse function converts from screen pixel coord to world coord
 // tính toán lại vị trí chuột x so với thực tế sau khi bị translate và zoom xg
@@ -103,111 +98,6 @@ export const getSize = (size: WindowSize) => {
   return { width: size.width * INIT_SCALE, height: size.height * INIT_SCALE };
 };
 
-// export const isContainsBox = (
-//   boundsIn: Bounds,
-//   boundsOut: Bounds & { xStart: number; yStart: number }
-// ) => {
-//   return (
-//     (boundsOut.xStart <= boundsIn.x + boundsIn.width &&
-//       boundsOut.yStart <= boundsIn.y + boundsIn.height &&
-//       boundsOut.y >= boundsIn.y &&
-//       boundsOut.x >= boundsIn.x) ||
-//     (boundsOut.xStart <= boundsIn.x + boundsIn.width &&
-//       boundsOut.yStart >= boundsIn.y &&
-//       boundsOut.y <= boundsIn.y + boundsIn.height &&
-//       boundsOut.x >= boundsIn.x) ||
-//     (boundsOut.xStart >= boundsIn.x &&
-//       boundsOut.yStart >= boundsIn.y &&
-//       boundsOut.y <= boundsIn.y + boundsIn.height &&
-//       boundsOut.x <= boundsIn.x + boundsIn.width) ||
-//     (boundsOut.xStart >= boundsIn.x &&
-//       boundsOut.yStart <= boundsIn.y &&
-//       boundsOut.y >= boundsIn.y &&
-//       boundsOut.x <= boundsIn.x + boundsIn.width)
-//   );
-// };
-
-// export const isFocus = (
-//   point: Point,
-//   screen: { x: number; y: number; width: number; height: number },
-//   margin = 0
-// ) => {
-//   const { x, y, width, height } = screen;
-//   const [xPoint, yPoint] = point;
-//   return (
-//     xPoint >= x - margin &&
-//     xPoint <= x + width + margin &&
-//     yPoint >= y - margin &&
-//     yPoint <= y + height + margin
-//   );
-// };
-
-// export const checkFocusLoop = (
-//   component: ComponentApp,
-//   mouseX: number,
-//   mouseY: number
-// ): boolean => {
-//   if (isFocus([mouseX, mouseY], component, 5)) {
-//     return true;
-//   }
-//   const { children = [], x, y } = component;
-//   if (!children.length) return false;
-//   const bool = children.some((item) => {
-//     const iFocus = isFocus([mouseX - x, mouseY - y], item, 5);
-//     if (iFocus) return true;
-//     return item.children?.some((itemChild) => {
-//       return checkFocusLoop(
-//         itemChild,
-//         mouseX - x - item.x,
-//         mouseY - y - item.y
-//       );
-//     });
-//   });
-//   return bool;
-// };
-
-// export const getChildFocus = (
-//   child: TypeSelection,
-//   mouseX: number,
-//   mouseY: number,
-//   refChild: {
-//     child: TypeSelection | undefined;
-//     parents: (string | number)[];
-//   }
-// ) => {
-//   const screen = child.children?.find((sc) => {
-//     return checkFocusLoop(sc, mouseX - child.x, mouseY - child.y);
-//   });
-//   if (!screen) return;
-//   const newScreen = { ...screen, parents: [] };
-//   refChild.child = newScreen;
-//   const { children } = screen;
-//   if (!children?.length) return;
-//   const checkFocusElement = children.some((sc) =>
-//     checkFocusLoop(sc, mouseX - child.x - screen.x, mouseY - child.y - screen.y)
-//   );
-//   if (!checkFocusElement) return;
-//   refChild.parents.push(screen.id); // first parent is screen id
-//   getChildFocus(newScreen, mouseX - child.x, mouseY - child.y, refChild);
-// };
-
-// const onMouseDown = (event: MouseEvent) => {
-// if (!refElement.current?.contains(event.target as Node)) return; //todo
-// const mouseX = (event.pageX - zoom.offset[0]) / zoom.scale;
-// const mouseY = (event.pageY - zoom.offset[1]) / zoom.scale;
-// const refChild: {
-//   child: SelectionChild | undefined;
-//   parents: (string | number)[];
-// } = {
-//   child: undefined,
-//   parents: [],
-// };
-// const screen = screens.find((sc) => checkFocusLoop(sc, mouseX, mouseY));
-// if (screen) {
-//   getChildFocus(screen, mouseX, mouseY, refChild);
-// }
-// };
-
 export const getConfig = (props: CanvasContextValue): CanvasContextValue => {
   const {
     lineWidth,
@@ -220,10 +110,11 @@ export const getConfig = (props: CanvasContextValue): CanvasContextValue => {
     backgroundColor,
     framePixelColor,
     scaleVisibleFrame,
-    designMode,
     initScale,
     backgroundColorMenu,
     sizeGridSquare,
+    titlePageColor,
+    titlePageHoverColor,
   } = props;
 
   return {
@@ -237,9 +128,10 @@ export const getConfig = (props: CanvasContextValue): CanvasContextValue => {
     backgroundColor,
     framePixelColor,
     scaleVisibleFrame,
-    designMode,
     initScale,
     backgroundColorMenu,
     sizeGridSquare,
+    titlePageColor,
+    titlePageHoverColor,
   };
 };

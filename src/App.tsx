@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Canvas from "./packages/Canvas";
 import { ComponentAppType, ComponentBase, WindowSize } from "./packages/types";
-import Layout from "./Layout";
+import Layout from "./packages/Layout";
 
 const screens: ComponentBase[] = [
   {
@@ -15,6 +15,7 @@ const screens: ComponentBase[] = [
     y: 0,
     children: [],
     type: ComponentAppType.SCREEN,
+    backgroundColor: "#F8C8A5",
   },
   {
     id: "6e12c422cbcf",
@@ -27,11 +28,21 @@ const screens: ComponentBase[] = [
     y: 0,
     children: [],
     type: ComponentAppType.SCREEN,
+    backgroundColor: "#F8C8A5",
   },
 ];
 
 const Editor: React.FC = () => {
-  const [windowSize, setWindowSize] = useState<WindowSize | undefined>();
+  const [{ width, height }, setWindowSize] = useState<WindowSize>({
+    width: window?.innerWidth,
+    height: window?.innerHeight,
+  });
+
+  const getWindowSize = useCallback(() => {
+    if (width !== window.innerWidth || height !== window.innerHeight) {
+      setWindowSize({ width: window.innerWidth, height: window.innerHeight });
+    }
+  }, [height, width]);
 
   useEffect(() => {
     getWindowSize();
@@ -39,18 +50,19 @@ const Editor: React.FC = () => {
     return () => {
       window.removeEventListener("resize", getWindowSize);
     };
-    //eslint-disable-next-line
-  }, []);
+  }, [getWindowSize]);
 
-  const getWindowSize = useCallback(() => {
-    setWindowSize({ width: window.innerWidth, height: window.innerHeight });
-  }, []);
+  if (!width || !height) return null;
 
-  return windowSize ? (
+  return (
     <Layout>
-      <Canvas components={screens} windowSize={windowSize} />
+      <Canvas
+        components={screens}
+        windowSize={{ width, height }}
+        defaultScale={0.5}
+      />
     </Layout>
-  ) : null;
+  );
 };
 
 export default Editor;
