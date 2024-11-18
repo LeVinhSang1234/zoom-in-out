@@ -21,7 +21,7 @@ type Props = {
   update?: (component: ComponentProps, components: ComponentProps[]) => void;
 };
 
-class CanvasControlWrapper extends Component<Props> {
+class CanvasControl extends Component<Props> {
   control: TCanvasControl;
   captureScreen?: { x: number; y: number; width: number; height: number };
 
@@ -235,4 +235,4 @@ class CanvasControlWrapper extends Component<Props> {
   }
 }
 
-export default CanvasControlWrapper;
+export default CanvasControl;

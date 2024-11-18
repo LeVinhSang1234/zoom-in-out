@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Canvas from "./packages/Canvas";
 import { ComponentAppType, ComponentBase, WindowSize } from "./packages/types";
-import CanvasControlWrapper from "./packages/CanvasControlWrapper";
+import CanvasControlWrapper from "./packages/CanvasControl";
 
 const scs: ComponentBase[] = [
   {
@@ -59,13 +59,13 @@ const Editor: React.FC = () => {
     );
   }
 
+  if (!windowSize) return null;
+
   return (
     <div className="app">
-      {windowSize ? (
-        <CanvasControlWrapper components={screens}>
-          <Canvas windowSize={windowSize} />
-        </CanvasControlWrapper>
-      ) : null}
+      <CanvasControlWrapper components={screens}>
+        <Canvas windowSize={windowSize} />
+      </CanvasControlWrapper>
     </div>
   );
 };
