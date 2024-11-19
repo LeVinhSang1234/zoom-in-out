@@ -6,11 +6,12 @@ import {
   WindowSize,
   Zoom,
 } from "../types";
-import { page } from "../components/page";
+import { DrawPage } from "../components/DrawPage";
 import {
   getConfig,
+  getMaxHeightSize,
+  getMaxWidthSize,
   getSize,
-  isHoved,
   makeScreen,
   zoomedX_INV,
   zoomedY_INV,
@@ -22,13 +23,13 @@ import ElementListener from "../lib/ElementListener";
 import DisabledBrowser from "../lib/DisabledBrowser";
 import { withCanvasProvider } from "../context/withCanvasProvider";
 import { CanvasContextValue } from "../context/canvas";
-
-import "./index.css";
-import { makeTitle, name } from "../components/name";
+import { DrawName } from "../components/DrawName";
 import {
   TCanvasControlContext,
   withControlProvider,
 } from "../context/CanvasControl";
+import FPS from "../lib/FPS";
+import "./index.css";
 
 type Props<T> = {
   windowSize: WindowSize;
@@ -56,9 +57,11 @@ class Canvas<T> extends Component<CanvasProps<T>> {
     super(props);
     this.ctx = null;
     this.canvas = null;
-    const { windowSize, defaultScale = 1 } = props;
+    const { windowSize, defaultScale = 1, components } = props;
     const { width, height } = getSize(windowSize);
-    const origin = { x: width / 4, y: height / 4 };
+    const maxWidth = getMaxWidthSize(components, defaultScale);
+    const maxHeight = getMaxHeightSize(components, defaultScale);
+    const origin = { x: (width - maxWidth) / 2, y: (height - maxHeight) / 2 };
     this.zoom = {
       scale: defaultScale,
       worldOrigin: { x: 0, y: 0 },
@@ -150,31 +153,15 @@ class Canvas<T> extends Component<CanvasProps<T>> {
     this.ctx.restore();
 
     const { components, windowSize } = props;
-    const config = getConfig(this.props);
+    const config = getConfig({ ...props, isSpace: this.app.pressSpace });
     const builds = components.map((component) => {
-      let _com = {
-        ...component,
-        zoom: this.zoom,
-        windowSize,
-        config,
-      } as unknown as ComponentApp;
-      _com = makeScreen(_com);
-      _com.cursor = {
-        inTitle: () => {
-          return isHoved(this.zoom.mouse, _com.titleConfig);
-        },
-        inScreen: () => {
-          if (this.app.pressSpace) return false;
-          const isHovePage = isHoved(this.zoom.mouse, _com);
-          return isHovePage;
-        },
-      };
-      makeTitle(this.ctx!, _com);
-      page(this.ctx!, _com);
+      let _com: ComponentApp = { ...component, zoom: this.zoom, config } as any;
+      makeScreen(this.ctx!, _com);
+      DrawPage(this.ctx!, _com);
       return _com;
     });
-    for (const build of builds) name(this.ctx!, build);
     framePixel(this.ctx, { windowSize, zoom: this.zoom, config });
+    for (const build of builds) DrawName(this.ctx!, build);
   };
 
   private setSizeCanvas = (windowSize: WindowSize) => {
@@ -205,6 +192,9 @@ class Canvas<T> extends Component<CanvasProps<T>> {
   private onMouseDown = () => {
     this.app.downing = true;
     if (this.app.pressSpace) this.canvasGrabbing();
+  };
+
+  private onDoubleClick = () => {
     const { titleHover } = this.props.getControl();
     console.log("titleHover", titleHover);
   };
@@ -244,6 +234,7 @@ class Canvas<T> extends Component<CanvasProps<T>> {
           getDom={() => this.canvas}
           onWheel={this.onWheel}
           onMouseDown={this.onMouseDown}
+          onDoubleClick={this.onDoubleClick}
           onMouseMove={this.onMouseEvent}
           onMouseOut={this.onMouseEvent}
         />
@@ -254,6 +245,7 @@ class Canvas<T> extends Component<CanvasProps<T>> {
           onKeyUp={this.onKeyUp}
         />
         <DisabledBrowser />
+        <FPS />
       </>
     );
   }

@@ -5,6 +5,7 @@ type Props = {
   onWheel?: (event: WheelEvent) => void;
   onMouseUp?: (event: MouseEvent) => void;
   onMouseDown?: (event: MouseEvent) => void;
+  onDoubleClick?: (event: MouseEvent) => void;
   onMouseOut?: (event: MouseEvent) => void;
   onMouseOver?: (event: MouseEvent) => void;
   onMouseLeave?: (event: MouseEvent) => void;
@@ -15,7 +16,8 @@ type Props = {
 };
 
 class ElementListener extends Component<Props> {
-  remove: { [key: string]: () => void };
+  private remove: { [key: string]: () => void };
+  private _timeout?: NodeJS.Timeout;
 
   constructor(props: Props) {
     super(props);
@@ -36,6 +38,7 @@ class ElementListener extends Component<Props> {
       onMouseUp,
       onWheel,
       getDom,
+      onDoubleClick,
       options = { passive: false },
     } = this.props;
     const dom = getDom();
@@ -46,10 +49,10 @@ class ElementListener extends Component<Props> {
         dom.removeEventListener("mouseup", onMouseUp);
       };
     }
-    if (onMouseDown) {
-      dom.addEventListener("mousedown", onMouseDown, options);
+    if (onMouseDown || onDoubleClick) {
+      dom.addEventListener("mousedown", this.onMouseDown, options);
       this.remove.mousedown = () => {
-        dom.removeEventListener("mousedown", onMouseDown);
+        dom.removeEventListener("mousedown", this.onMouseDown);
       };
     }
     if (onMouseLeave) {
@@ -89,6 +92,17 @@ class ElementListener extends Component<Props> {
       this.remove.key?.();
     });
   }
+
+  onMouseDown = (event: MouseEvent) => {
+    const { onDoubleClick, onMouseDown } = this.props;
+    if (this._timeout) {
+      this._timeout = undefined;
+      onDoubleClick?.(event);
+    } else {
+      onMouseDown?.(event);
+      this._timeout = setTimeout(() => (this._timeout = undefined), 300);
+    }
+  };
 
   render() {
     return null;

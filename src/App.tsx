@@ -7,8 +7,6 @@ const screens: ComponentBase[] = [
   {
     id: "7df2236d89c2",
     name: "Home v15",
-    top: 0,
-    left: 0,
     width: 375,
     height: 667,
     x: 0,
@@ -20,8 +18,6 @@ const screens: ComponentBase[] = [
   {
     id: "6e12c422cbcf",
     name: "Page 1",
-    top: 0,
-    left: 475,
     width: 375,
     height: 667,
     x: 475,

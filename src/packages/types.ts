@@ -27,8 +27,6 @@ export type TypeSelection = { paths: string[]; id: string };
 export type ComponentBase = {
   x: number;
   y: number;
-  top?: number;
-  left?: number;
   width: number;
   height: number;
   name: string;
@@ -45,6 +43,10 @@ export type TitleConfig = {
   x: number;
   y: number;
   fontSize: number;
+  text: string;
+  fullText: string;
+  xCanvas: number;
+  yCanvas: number;
 };
 
 export type TitleReq = { id: string; config: TitleConfig };
@@ -56,7 +58,7 @@ export type ComponentApp = {
   cursor: { inScreen: () => boolean; inTitle: () => boolean };
   children?: ComponentApp[];
   type: ComponentAppType;
-  titleConfig: TitleConfig & { text: string };
+  titleConfig: TitleConfig;
 } & ComponentProps &
   ComponentBase & { config: CanvasContextValue };
 

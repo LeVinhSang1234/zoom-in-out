@@ -1,12 +1,10 @@
 import { CanvasContextValue } from "./context/canvas";
 import { INIT_SCALE, base64Point } from "./conts";
 import {
-  // Bounds,
   ComponentApp,
   CursorType,
   KEYBOARD_CODE,
-  // Point,
-  // TypeSelection,
+  Pointer,
   WindowSize,
   Zoom,
 } from "./types";
@@ -72,14 +70,26 @@ export const zoomedY_INV = (number: number, zoom: Zoom) => {
 
 // converts from world coord to screen pixel coord
 // tính toán lại component
-export const makeScreen = (screen: ComponentApp) => {
-  const { zoom } = screen;
-  return {
-    ...screen,
-    x: zoomedX(screen.x, zoom),
-    y: zoomedY(screen.y, zoom),
-    width: zoomed(screen.width, zoom),
-    height: zoomed(screen.height, zoom),
+export const makeScreen = (
+  ctx: CanvasRenderingContext2D,
+  screen: ComponentApp
+) => {
+  const { zoom, config } = screen;
+  screen.x = zoomedX(screen.x, zoom);
+  screen.y = zoomedY(screen.y, zoom);
+  screen.width = zoomed(screen.width, zoom);
+  screen.height = zoomed(screen.height, zoom);
+  makeTitle(ctx, screen);
+  screen.cursor = {
+    inTitle: () => {
+      if (config.isSpace) return false;
+      return isHoved(zoom.mouse, screen.titleConfig);
+    },
+    inScreen: () => {
+      if (config.isSpace) return false;
+      const isHovePage = isHoved(zoom.mouse, screen);
+      return isHovePage;
+    },
   };
 };
 
@@ -113,6 +123,20 @@ export const getSize = (size: WindowSize) => {
   return { width: size.width * INIT_SCALE, height: size.height * INIT_SCALE };
 };
 
+export const getMaxWidthSize = (
+  components: (WindowSize & Pointer)[],
+  scale: number
+) => {
+  return Math.max(...components.map((e) => e.x + e.width)) * scale;
+};
+
+export const getMaxHeightSize = (
+  components: (WindowSize & Pointer)[],
+  scale: number
+) => {
+  return Math.max(...components.map((e) => e.x + e.height)) * scale;
+};
+
 export const editTitle = (config: { width: number; height: number }) => {
   const input = document.createElement("input");
   input.autofocus = true;
@@ -127,7 +151,9 @@ export const editTitle = (config: { width: number; height: number }) => {
   };
 };
 
-export const getConfig = (props: CanvasContextValue): CanvasContextValue => {
+export const getConfig = (
+  props: CanvasContextValue & { windowSize: WindowSize }
+): CanvasContextValue & { windowSize: WindowSize } => {
   const {
     lineWidth,
     fontSize,
@@ -144,6 +170,8 @@ export const getConfig = (props: CanvasContextValue): CanvasContextValue => {
     sizeGridSquare,
     titlePageColor,
     titlePageHoverColor,
+    isSpace,
+    windowSize,
     getControl,
   } = props;
 
@@ -164,5 +192,57 @@ export const getConfig = (props: CanvasContextValue): CanvasContextValue => {
     titlePageColor,
     titlePageHoverColor,
     getControl,
+    isSpace,
+    windowSize,
+  };
+};
+
+export const clsx = (...args: any[]) => {
+  return args
+    .filter((e) => typeof e === "string" && !!e?.trim())
+    .join(" ")
+    .trim();
+};
+
+const SUB = 9;
+export const makeTitle = (
+  ctx: CanvasRenderingContext2D,
+  component: ComponentApp
+) => {
+  const { width, x, y, name, title, config } = component;
+  const { fontSize, initScale } = config;
+  let text = title || name;
+  ctx.save();
+  ctx.font = `400 ${fontSize * initScale}px Inter, sans-serif`;
+  let textWidth = ctx.measureText(text).width;
+  if (textWidth > width) {
+    const ellipsis = "...";
+    let truncatedText = text.slice(0, -1);
+    while (
+      truncatedText.length > 1 &&
+      ctx.measureText(truncatedText + ellipsis).width > width
+    ) {
+      truncatedText = truncatedText.slice(0, -1);
+    }
+    text = truncatedText + ellipsis;
+  }
+  const height = fontSize * initScale;
+  const yText = y - SUB * initScale;
+  textWidth = ctx.measureText(text).width;
+  if (textWidth > width) {
+    text = "...";
+    textWidth = width;
+  }
+  ctx.restore();
+  component.titleConfig = {
+    x,
+    y: yText - height,
+    xCanvas: x,
+    yCanvas: yText,
+    width: textWidth,
+    height: height + SUB * initScale,
+    fontSize: fontSize * initScale,
+    text,
+    fullText: text,
   };
 };

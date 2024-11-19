@@ -1,6 +1,6 @@
 import { ComponentApp } from "../types";
 
-export const page = (ctx: CanvasRenderingContext2D, screen: ComponentApp) => {
+export const DrawPage = (ctx: CanvasRenderingContext2D, screen: ComponentApp) => {
   const { x, y, width, height, cursor, backgroundColor, config, id } = screen;
   const { lineWidth, initScale, colorBorderHoverGroup, getControl } = config;
   const { setHover, removeHover } = getControl();

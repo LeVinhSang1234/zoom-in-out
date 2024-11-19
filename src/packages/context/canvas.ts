@@ -34,6 +34,7 @@ export type CanvasContextValue = {
   scaleVisibleFrame: number;
   initScale: number;
   sizeGridSquare: number;
+  isSpace?: boolean;
 } & TCanvasControlContext;
 
 export const defaultValueContext: CanvasContextValue & TCanvasControlContext = {
