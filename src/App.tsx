@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useState } from "react";
 import Canvas from "./packages/Canvas";
 import { ComponentAppType, ComponentBase, WindowSize } from "./packages/types";
 import Layout from "./packages/Layout";
-import CanvasProvider from "./packages/context/CanvasProvider";
 
 const screens: ComponentBase[] = [
   {

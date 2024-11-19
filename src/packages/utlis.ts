@@ -26,6 +26,11 @@ export const zoomed = (number: number, zoom: Zoom) => {
   return number * scale;
 };
 
+export const unZoomed = (number: number, zoom: Zoom) => {
+  const { scale } = zoom;
+  return number / scale;
+};
+
 // converts from world coord to screen pixel coord
 // biến đổi vị trí x ban đầu thành vị trí mới sau khi zoom
 export const zoomedX = (number: number, zoom: Zoom) => {
@@ -34,12 +39,22 @@ export const zoomedX = (number: number, zoom: Zoom) => {
   return (number - worldOrigin.x) * scale + screenOrigin.x;
 };
 
+export const unZoomedX = (number: number, zoom: Zoom) => {
+  const { worldOrigin, screenOrigin, scale } = zoom;
+  return (number + worldOrigin.x * scale - screenOrigin.x) / scale;
+};
+
 // converts from world coord to screen pixel coord
 // biến đổi vị trí y ban đầu thành vị trí mới sau khi zoom
 export const zoomedY = (number: number, zoom: Zoom) => {
   const { worldOrigin, screenOrigin, scale } = zoom;
   // scale & origin Y
   return (number - worldOrigin.y) * scale + screenOrigin.y;
+};
+
+export const unZoomedY = (number: number, zoom: Zoom) => {
+  const { worldOrigin, screenOrigin, scale } = zoom;
+  return (number + worldOrigin.y * scale - screenOrigin.y) / scale;
 };
 
 // inverse function converts from screen pixel coord to world coord

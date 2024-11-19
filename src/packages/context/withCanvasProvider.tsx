@@ -1,4 +1,10 @@
-import { ComponentType, forwardRef, useCallback, useRef } from "react";
+import {
+  ComponentType,
+  forwardRef,
+  PropsWithoutRef,
+  useCallback,
+  useRef,
+} from "react";
 import { CanvasContextValue, useCanvasContext } from "./canvas";
 import {
   CanvasControlProvider,
@@ -10,7 +16,7 @@ import { TypeSelection } from "../types";
 export function withCanvasProvider<T, Type>(
   Component: ComponentType<T & CanvasContextValue>
 ) {
-  return forwardRef<Type, T>((props: T, ref) => {
+  return forwardRef<Type, T>((props: PropsWithoutRef<T>, ref) => {
     const value = useCanvasContext();
 
     const selection = useRef<TypeSelection[]>([]);
@@ -67,7 +73,7 @@ export function withCanvasProvider<T, Type>(
 
     return (
       <CanvasControlProvider value={{ getControl }}>
-        <Component ref={ref} {...value} {...props} />
+        <Component ref={ref} {...value} {...(props as T)} />
       </CanvasControlProvider>
     );
   });

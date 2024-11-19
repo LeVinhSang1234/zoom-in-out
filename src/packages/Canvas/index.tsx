@@ -30,15 +30,18 @@ import {
   withControlProvider,
 } from "../context/CanvasControl";
 
-type CanvasProps<T> = {
+type Props<T> = {
   windowSize: WindowSize;
-  components: T & ComponentProps[];
+  components: (T & ComponentProps)[];
   maxZoom?: number;
   minZoom?: number;
   defaultScale?: number;
   backgroundColor?: string;
-} & CanvasContextValue &
-  TCanvasControlContext;
+};
+
+class CanvasBase<T> extends Component<Props<T>> {}
+
+type CanvasProps<T> = Props<T> & CanvasContextValue & TCanvasControlContext;
 
 class Canvas<T> extends Component<CanvasProps<T>> {
   private canvas: HTMLCanvasElement | null;
@@ -256,4 +259,6 @@ class Canvas<T> extends Component<CanvasProps<T>> {
   }
 }
 
-export default withCanvasProvider(withControlProvider(Canvas));
+export default withCanvasProvider(
+  withControlProvider(Canvas)
+) as unknown as typeof CanvasBase;

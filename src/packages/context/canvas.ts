@@ -16,7 +16,7 @@ import {
   TITLE_PAGE_COLOR,
   TITLE_PAGE_HOVER_COLOR,
 } from "../conts";
-import { TCanvasControlContext } from "./CanvasControl";
+import { initControl, TCanvasControlContext } from "./CanvasControl";
 
 export type CanvasContextValue = {
   lineWidth: number;
@@ -52,17 +52,7 @@ export const defaultValueContext: CanvasContextValue & TCanvasControlContext = {
   sizeGridSquare: SIZE_GRID_SQUARE,
   titlePageColor: TITLE_PAGE_COLOR,
   titlePageHoverColor: TITLE_PAGE_HOVER_COLOR,
-  getControl: () => ({
-    hover: [],
-    selection: [],
-    titleHover: undefined,
-    setHover: () => undefined,
-    removeHover: () => undefined,
-    setSelection: () => undefined,
-    setTitleHover: () => undefined,
-    setTitleEdited: () => undefined,
-    removeTitleHover: () => undefined,
-  }),
+  getControl: () => initControl,
 };
 
 export const CanvasContext =
