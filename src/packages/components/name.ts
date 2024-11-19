@@ -35,6 +35,7 @@ export const makeTitle = (
     x,
     y: yText - height,
     text,
+    fontSize: fontSize * initScale,
   };
 };
 
@@ -42,14 +43,28 @@ export const name = (
   ctx: CanvasRenderingContext2D,
   component: ComponentApp
 ) => {
-  const { x, y, name, title, config, cursor } = component;
-  const { fontSize, initScale, titlePageColor, titlePageHoverColor } = config;
-  let text = title || name;
-  if (!text) return;
+  const { x, y, config, cursor, id, titleConfig } = component;
+  const {
+    fontSize,
+    initScale,
+    titlePageColor,
+    titlePageHoverColor,
+    getControl,
+  } = config;
+  let text = titleConfig.text;
+  const { setTitleHover, removeTitleHover } = getControl();
+
   ctx.save();
   ctx.beginPath();
   ctx.font = `400 ${fontSize * initScale}px Inter, sans-serif`;
-  const isHover = cursor.inScreen();
+  const isHoverScreen = cursor.inScreen();
+  const isHoverTitle = cursor.inTitle();
+  const isHover = isHoverScreen || isHoverTitle;
+
+  if (isHoverTitle) {
+    setTitleHover({ id, config: titleConfig });
+  } else removeTitleHover(id);
+
   ctx.fillStyle = !isHover ? titlePageColor : titlePageHoverColor;
   ctx.textAlign = "left";
   ctx.fillText(text, x, y - SUB * initScale);

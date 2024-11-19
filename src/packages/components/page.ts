@@ -1,9 +1,16 @@
 import { ComponentApp } from "../types";
 
 export const page = (ctx: CanvasRenderingContext2D, screen: ComponentApp) => {
-  const { x, y, width, height, cursor, backgroundColor, config } = screen;
-  const { lineWidth, initScale, colorBorderHoverGroup } = config;
-  const isHover = cursor.inScreen();
+  const { x, y, width, height, cursor, backgroundColor, config, id } = screen;
+  const { lineWidth, initScale, colorBorderHoverGroup, getControl } = config;
+  const { setHover, removeHover } = getControl();
+  const isHoverScreen = cursor.inScreen();
+  const isHoverTitle = cursor.inTitle();
+  const isHover = isHoverScreen || isHoverTitle;
+
+  if (isHover) {
+    setHover(id);
+  } else removeHover(id);
 
   /*------- Frame page -------*/
   ctx.save();

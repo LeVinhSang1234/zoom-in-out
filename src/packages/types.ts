@@ -39,14 +39,24 @@ export type ComponentBase = {
   type: ComponentAppType;
 } & CSSPropertiesProps;
 
+export type TitleConfig = {
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  fontSize: number;
+};
+
+export type TitleReq = { id: string; config: TitleConfig };
+
 export type ComponentProps = {} & WindowSize & Pointer;
 
 export type ComponentApp = {
   zoom: Zoom;
-  cursor: { inScreen: () => boolean };
+  cursor: { inScreen: () => boolean; inTitle: () => boolean };
   children?: ComponentApp[];
   type: ComponentAppType;
-  titleConfig: WindowSize & Pointer & { text: string };
+  titleConfig: TitleConfig & { text: string };
 } & ComponentProps &
   ComponentBase & { config: CanvasContextValue };
 

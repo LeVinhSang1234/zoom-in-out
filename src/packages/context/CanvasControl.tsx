@@ -1,11 +1,19 @@
-import { createContext } from "react";
-import { TypeSelection } from "../types";
+import { TitleConfig, TypeSelection } from "../types";
+import { ComponentType, forwardRef, createContext, useContext } from "react";
+
+export type TitleReq = { id: string; config: TitleConfig };
 
 export type TCanvasControl = {
   selection: TypeSelection[];
-  pageTitleHover?: string;
+  titleHover?: TitleReq;
+  hover?: string[];
+  titleEdited?: TitleReq;
   setSelection: (selection: TypeSelection[]) => void;
-  setPageTitleHover: (id: string) => void;
+  setTitleHover: (req: TitleReq) => void;
+  setTitleEdited: (req: TitleReq) => void;
+  setHover: (id: string) => void;
+  removeHover: (id: string) => void;
+  removeTitleHover: (id: string) => void;
 };
 
 export type TCanvasControlContext = {
@@ -15,10 +23,25 @@ export type TCanvasControlContext = {
 export const CanvasControlContext = createContext<TCanvasControlContext>({
   getControl: () => ({
     selection: [],
-    pageTitleHover: undefined,
+    titleHover: undefined,
+    titleEdited: undefined,
+    hover: [],
+    setHover: () => undefined,
+    removeHover: () => undefined,
     setSelection: () => undefined,
-    setPageTitleHover: () => undefined,
+    setTitleHover: () => undefined,
+    setTitleEdited: () => undefined,
+    removeTitleHover: () => undefined,
   }),
 });
 
 export const CanvasControlProvider = CanvasControlContext.Provider;
+
+export function withControlProvider<T, Type>(
+  Component: ComponentType<T & TCanvasControlContext>
+) {
+  return forwardRef<Type, T>((props: T, ref) => {
+    const { getControl } = useContext(CanvasControlContext);
+    return <Component ref={ref} {...props} getControl={getControl} />;
+  });
+}

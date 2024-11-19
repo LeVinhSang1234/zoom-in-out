@@ -98,6 +98,20 @@ export const getSize = (size: WindowSize) => {
   return { width: size.width * INIT_SCALE, height: size.height * INIT_SCALE };
 };
 
+export const editTitle = (config: { width: number; height: number }) => {
+  const input = document.createElement("input");
+  input.autofocus = true;
+  input.style.position = "absolute";
+  input.style.width = `${config.width}px`;
+  input.style.height = `${config.height}px`;
+  document.body.append(input);
+  return () => () => {
+    try {
+      document.body.removeChild(input);
+    } catch {}
+  };
+};
+
 export const getConfig = (props: CanvasContextValue): CanvasContextValue => {
   const {
     lineWidth,
@@ -115,6 +129,7 @@ export const getConfig = (props: CanvasContextValue): CanvasContextValue => {
     sizeGridSquare,
     titlePageColor,
     titlePageHoverColor,
+    getControl,
   } = props;
 
   return {
@@ -133,5 +148,6 @@ export const getConfig = (props: CanvasContextValue): CanvasContextValue => {
     sizeGridSquare,
     titlePageColor,
     titlePageHoverColor,
+    getControl,
   };
 };

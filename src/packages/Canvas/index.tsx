@@ -25,6 +25,10 @@ import { CanvasContextValue } from "../context/canvas";
 
 import "./index.css";
 import { makeTitle, name } from "../components/name";
+import {
+  TCanvasControlContext,
+  withControlProvider,
+} from "../context/CanvasControl";
 
 type CanvasProps<T> = {
   windowSize: WindowSize;
@@ -33,7 +37,8 @@ type CanvasProps<T> = {
   minZoom?: number;
   defaultScale?: number;
   backgroundColor?: string;
-} & CanvasContextValue;
+} & CanvasContextValue &
+  TCanvasControlContext;
 
 class Canvas<T> extends Component<CanvasProps<T>> {
   private canvas: HTMLCanvasElement | null;
@@ -152,11 +157,13 @@ class Canvas<T> extends Component<CanvasProps<T>> {
       } as unknown as ComponentApp;
       _com = makeScreen(_com);
       _com.cursor = {
+        inTitle: () => {
+          return isHoved(this.zoom.mouse, _com.titleConfig);
+        },
         inScreen: () => {
           if (this.app.pressSpace) return false;
           const isHovePage = isHoved(this.zoom.mouse, _com);
-          const isHoveTitle = isHoved(this.zoom.mouse, _com.titleConfig);
-          return isHovePage || isHoveTitle;
+          return isHovePage;
         },
       };
       makeTitle(this.ctx!, _com);
@@ -195,6 +202,8 @@ class Canvas<T> extends Component<CanvasProps<T>> {
   private onMouseDown = () => {
     this.app.downing = true;
     if (this.app.pressSpace) this.canvasGrabbing();
+    const { titleHover } = this.props.getControl();
+    console.log("titleHover", titleHover);
   };
 
   private onMouseUp = () => {
@@ -247,4 +256,4 @@ class Canvas<T> extends Component<CanvasProps<T>> {
   }
 }
 
-export default withCanvasProvider(Canvas);
+export default withCanvasProvider(withControlProvider(Canvas));
