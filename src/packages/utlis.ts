@@ -1,5 +1,5 @@
 import { CanvasContextValue } from "./context/canvas";
-import { INIT_SCALE, base64Point } from "./conts";
+import { base64Point, RATIO } from "./conts";
 import {
   ComponentApp,
   CursorType,
@@ -119,8 +119,11 @@ export const getCursor = (type: CursorType) => {
   return type;
 };
 
-export const getSize = (size: WindowSize) => {
-  return { width: size.width * INIT_SCALE, height: size.height * INIT_SCALE };
+export const getSize = (size: WindowSize, ratio: number) => {
+  return {
+    width: size.width * ratio,
+    height: size.height * ratio,
+  };
 };
 
 export const getMaxWidthSize = (
@@ -134,26 +137,12 @@ export const getMaxHeightSize = (
   components: (WindowSize & Pointer)[],
   scale: number
 ) => {
-  return Math.max(...components.map((e) => e.x + e.height)) * scale;
-};
-
-export const editTitle = (config: { width: number; height: number }) => {
-  const input = document.createElement("input");
-  input.autofocus = true;
-  input.style.position = "absolute";
-  input.style.width = `${config.width}px`;
-  input.style.height = `${config.height}px`;
-  document.body.append(input);
-  return () => () => {
-    try {
-      document.body.removeChild(input);
-    } catch {}
-  };
+  return Math.max(...components.map((e) => e.y + e.height)) * scale;
 };
 
 export const getConfig = (
-  props: CanvasContextValue & { windowSize: WindowSize }
-): CanvasContextValue & { windowSize: WindowSize } => {
+  props: CanvasContextValue & { layout: WindowSize }
+): CanvasContextValue & { layout: WindowSize } => {
   const {
     lineWidth,
     fontSize,
@@ -171,7 +160,7 @@ export const getConfig = (
     titlePageColor,
     titlePageHoverColor,
     isSpace,
-    windowSize,
+    layout,
     getControl,
   } = props;
 
@@ -193,7 +182,7 @@ export const getConfig = (
     titlePageHoverColor,
     getControl,
     isSpace,
-    windowSize,
+    layout,
   };
 };
 
@@ -210,10 +199,10 @@ export const makeTitle = (
   component: ComponentApp
 ) => {
   const { width, x, y, name, title, config } = component;
-  const { fontSize, initScale } = config;
+  const { fontSize, ratio = RATIO } = config;
   let text = title || name;
   ctx.save();
-  ctx.font = `400 ${fontSize * initScale}px Inter, sans-serif`;
+  ctx.font = `400 ${fontSize * ratio}px Inter, sans-serif`;
   let textWidth = ctx.measureText(text).width;
   if (textWidth > width) {
     const ellipsis = "...";
@@ -226,8 +215,8 @@ export const makeTitle = (
     }
     text = truncatedText + ellipsis;
   }
-  const height = fontSize * initScale;
-  const yText = y - SUB * initScale;
+  const height = fontSize * ratio;
+  const yText = y - SUB * ratio;
   textWidth = ctx.measureText(text).width;
   if (textWidth > width) {
     text = "...";
@@ -240,8 +229,8 @@ export const makeTitle = (
     xCanvas: x,
     yCanvas: yText,
     width: textWidth,
-    height: height + SUB * initScale,
-    fontSize: fontSize * initScale,
+    height: height + SUB * ratio,
+    fontSize: fontSize * ratio,
     text,
     fullText: text,
   };

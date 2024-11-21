@@ -1,9 +1,10 @@
 export const LINE_WIDTH = 2;
-export const INIT_SCALE = window.devicePixelRatio;
+export const INIT_SCALE = 0.5;
 export const FONT_SIZE = 11;
-export const MIN_ZOOM = 0.04 * INIT_SCALE;
-export const SIZE_LINE_FRAME = 1 * INIT_SCALE;
-export const MAX_ZOOM = 400 * INIT_SCALE;
+export const RATIO = window.devicePixelRatio
+export const MIN_ZOOM = 0.04 * RATIO;
+export const SIZE_LINE_FRAME = 1 * RATIO;
+export const MAX_ZOOM = 400 * RATIO;
 export const COLOR_BORDER_HOVER_ELEMENT = "#8b46e5";
 export const COLOR_BORDER_HOVER_GROUP = "#0d8be6";
 export const BACKGROUND_COLOR = "#343434";
@@ -11,7 +12,7 @@ export const BACKGROUND_COLOR_MENU = "#2c2c2c";
 export const FRAME_PIXEL_COLOR = "#AAAAAA";
 export const TITLE_PAGE_COLOR = "#979797";
 export const TITLE_PAGE_HOVER_COLOR = "#76b6e4";
-export const SCALE_VISIBLE_FRAME = 10 * INIT_SCALE;
+export const SCALE_VISIBLE_FRAME = 10 * RATIO;
 export const SIZE_GRID_SQUARE = 1;
 
 export const base64Point =

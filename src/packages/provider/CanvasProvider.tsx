@@ -3,7 +3,7 @@ import {
   CanvasContext,
   CanvasContextValue,
   defaultValueContext,
-} from "./canvas";
+} from "../context/canvas";
 
 type Props = {
   children?: ReactNode;

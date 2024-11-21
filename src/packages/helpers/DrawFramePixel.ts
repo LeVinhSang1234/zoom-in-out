@@ -1,15 +1,16 @@
 import { CanvasContextValue } from "../context/canvas";
+import { RATIO } from "../conts";
 import { WindowSize, Zoom } from "../types";
 import { getSize, zoomedX, zoomedX_INV, zoomedY, zoomedY_INV } from "../utlis";
 
 const scaleLine = 0.3;
 
-export const framePixel = (
+export const DrawFramePixel = (
   ctx: CanvasRenderingContext2D,
-  screen: { windowSize: WindowSize; zoom: Zoom; config: CanvasContextValue }
+  screen: { layout: WindowSize; zoom: Zoom; config: CanvasContextValue }
 ) => {
-  const { windowSize, zoom, config } = screen;
-  const { width, height } = getSize(windowSize);
+  const { layout, zoom, config } = screen;
+  const { width, height } = getSize(layout, config.ratio || RATIO);
   const newWidth = width / scaleLine;
   const newHeight = height / scaleLine;
   const { screenOrigin } = zoom;

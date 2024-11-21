@@ -5,8 +5,8 @@ import {
   KEYBOARD_CODE,
   WindowSize,
   Zoom,
-} from "../types";
-import { DrawPage } from "../components/DrawPage";
+} from "../../types";
+import { DrawPage } from "../../helpers/DrawPage";
 import {
   getConfig,
   getMaxHeightSize,
@@ -15,29 +15,26 @@ import {
   makeScreen,
   zoomedX_INV,
   zoomedY_INV,
-} from "../utlis";
-import { framePixel } from "../components/framePixel";
-import { BACKGROUND_COLOR, MAX_ZOOM, MIN_ZOOM } from "../conts";
-import EventListener from "../lib/EventListener";
-import ElementListener from "../lib/ElementListener";
-import DisabledBrowser from "../lib/DisabledBrowser";
-import { withCanvasProvider } from "../context/withCanvasProvider";
-import { CanvasContextValue } from "../context/canvas";
-import { DrawName } from "../components/DrawName";
+} from "../../utlis";
+import { DrawFramePixel } from "../../helpers/DrawFramePixel";
+import { BACKGROUND_COLOR, MAX_ZOOM, MIN_ZOOM, RATIO } from "../../conts";
+import EventListener from "../../lib/EventListener";
+import ElementListener from "../../lib/ElementListener";
+import DisabledBrowser from "../../lib/DisabledBrowser";
+import { withCanvasProvider } from "../../context/withCanvasProvider";
 import {
+  CanvasContextValue,
   TCanvasControlContext,
-  withControlProvider,
-} from "../context/CanvasControl";
-import FPS from "../lib/FPS";
+} from "../../context/canvas";
+import { DrawName } from "../../helpers/DrawName";
+import FPS from "../../lib/FPS";
 import "./index.css";
+import { withControlProvider } from "../../context/withControlProvider";
+import { DrawInputEdit } from "../../helpers/DrawInputEdit";
 
 type Props<T> = {
-  windowSize: WindowSize;
+  layout: WindowSize;
   components: (T & ComponentProps)[];
-  maxZoom?: number;
-  minZoom?: number;
-  defaultScale?: number;
-  backgroundColor?: string;
 };
 
 class CanvasBase<T> extends Component<Props<T>> {}
@@ -57,13 +54,13 @@ class Canvas<T> extends Component<CanvasProps<T>> {
     super(props);
     this.ctx = null;
     this.canvas = null;
-    const { windowSize, defaultScale = 1, components } = props;
-    const { width, height } = getSize(windowSize);
-    const maxWidth = getMaxWidthSize(components, defaultScale);
-    const maxHeight = getMaxHeightSize(components, defaultScale);
+    const { layout, initScale = 1, components, ratio = RATIO } = props;
+    const { width, height } = getSize(layout, ratio);
+    const maxWidth = getMaxWidthSize(components, initScale);
+    const maxHeight = getMaxHeightSize(components, initScale);
     const origin = { x: (width - maxWidth) / 2, y: (height - maxHeight) / 2 };
     this.zoom = {
-      scale: defaultScale,
+      scale: initScale,
       worldOrigin: { x: 0, y: 0 },
       screenOrigin: { ...origin },
       mouse: { ...origin, rx: 0, ry: 0, bounds: undefined },
@@ -74,9 +71,9 @@ class Canvas<T> extends Component<CanvasProps<T>> {
   }
 
   shouldComponentUpdate(nProps: CanvasProps<T>): boolean {
-    const { components, windowSize } = this.props;
-    if (components !== nProps.components || windowSize !== nProps.windowSize) {
-      this.setSizeCanvas(nProps.windowSize);
+    const { components, layout, ratio = RATIO } = this.props;
+    if (components !== nProps.components || layout !== nProps.layout) {
+      this.setSizeCanvas(nProps.layout, ratio);
       this.draw();
     }
     return false;
@@ -85,15 +82,19 @@ class Canvas<T> extends Component<CanvasProps<T>> {
   componentDidMount(): void {
     if (!this.canvas) return;
     this.ctx = this.canvas.getContext("2d");
-    const { windowSize } = this.props;
-    this.setSizeCanvas(windowSize);
+    const { layout, ratio = RATIO } = this.props;
+    this.setSizeCanvas(layout, ratio);
     this.draw();
   }
 
   private calculateMouse = (event: MouseEvent) => {
     if (!this.canvas) return;
     const { mouse } = this.zoom;
-    const size = getSize({ width: event.clientX, height: event.clientY });
+    const { ratio = RATIO } = this.props;
+    const size = getSize(
+      { width: event.clientX, height: event.clientY },
+      ratio
+    );
     mouse.bounds = this.canvas.getBoundingClientRect();
     mouse.x = size.width - mouse.bounds.left;
     mouse.y = size.height - mouse.bounds.top;
@@ -117,7 +118,11 @@ class Canvas<T> extends Component<CanvasProps<T>> {
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    const { minZoom = MIN_ZOOM, maxZoom = MAX_ZOOM } = this.props;
+    const {
+      minZoom = MIN_ZOOM,
+      maxZoom = MAX_ZOOM,
+      ratio = RATIO,
+    } = this.props;
     const { mouse } = this.zoom;
     if (e.ctrlKey || e.metaKey) {
       this.calculateMouse(e);
@@ -131,7 +136,7 @@ class Canvas<T> extends Component<CanvasProps<T>> {
       this.zoom.screenOrigin.x = mouse.x;
       this.zoom.screenOrigin.y = mouse.y;
     } else {
-      const size = getSize({ width: e.deltaX, height: e.deltaY });
+      const size = getSize({ width: e.deltaX, height: e.deltaY }, ratio);
       this.zoom.worldOrigin.y += size.height / 5 / this.zoom.scale;
       this.zoom.worldOrigin.x += size.width / 5 / this.zoom.scale;
     }
@@ -152,7 +157,7 @@ class Canvas<T> extends Component<CanvasProps<T>> {
     this.ctx.fill();
     this.ctx.restore();
 
-    const { components, windowSize } = props;
+    const { components, layout } = props;
     const config = getConfig({ ...props, isSpace: this.app.pressSpace });
     const builds = components.map((component) => {
       let _com: ComponentApp = { ...component, zoom: this.zoom, config } as any;
@@ -160,13 +165,16 @@ class Canvas<T> extends Component<CanvasProps<T>> {
       DrawPage(this.ctx!, _com);
       return _com;
     });
-    framePixel(this.ctx, { windowSize, zoom: this.zoom, config });
-    for (const build of builds) DrawName(this.ctx!, build);
+    DrawFramePixel(this.ctx, { layout, zoom: this.zoom, config });
+    for (const build of builds) {
+      DrawName(this.ctx!, build);
+      DrawInputEdit(build);
+    }
   };
 
-  private setSizeCanvas = (windowSize: WindowSize) => {
+  private setSizeCanvas = (windowSize: WindowSize, radio: number) => {
     if (!this.canvas) return;
-    const size = getSize(windowSize);
+    const size = getSize(windowSize, radio);
     this.canvas.width = size.width;
     this.canvas.height = size.height;
     this.canvas.style.width = `${windowSize.width}px`;
@@ -195,8 +203,8 @@ class Canvas<T> extends Component<CanvasProps<T>> {
   };
 
   private onDoubleClick = () => {
-    const { titleHover } = this.props.getControl();
-    console.log("titleHover", titleHover);
+    const { titleHover, setTitleEdited } = this.props.getControl();
+    if (titleHover) setTitleEdited(titleHover);
   };
 
   private onMouseUp = () => {
@@ -219,7 +227,7 @@ class Canvas<T> extends Component<CanvasProps<T>> {
   };
 
   render() {
-    const { windowSize: size, backgroundColor = BACKGROUND_COLOR } = this.props;
+    const { layout: size, backgroundColor = BACKGROUND_COLOR } = this.props;
     const style = { backgroundColor, ...size };
     return (
       <>

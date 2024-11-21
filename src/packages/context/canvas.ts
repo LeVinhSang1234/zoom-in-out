@@ -15,8 +15,9 @@ import {
   SIZE_GRID_SQUARE,
   TITLE_PAGE_COLOR,
   TITLE_PAGE_HOVER_COLOR,
+  RATIO,
 } from "../conts";
-import { initControl, TCanvasControlContext } from "./CanvasControl";
+import { TitleConfig, TypeSelection } from "../types";
 
 export type CanvasContextValue = {
   lineWidth: number;
@@ -35,6 +36,7 @@ export type CanvasContextValue = {
   initScale: number;
   sizeGridSquare: number;
   isSpace?: boolean;
+  ratio?: number;
 } & TCanvasControlContext;
 
 export const defaultValueContext: CanvasContextValue & TCanvasControlContext = {
@@ -53,6 +55,7 @@ export const defaultValueContext: CanvasContextValue & TCanvasControlContext = {
   sizeGridSquare: SIZE_GRID_SQUARE,
   titlePageColor: TITLE_PAGE_COLOR,
   titlePageHoverColor: TITLE_PAGE_HOVER_COLOR,
+  ratio: RATIO,
   getControl: () => initControl,
 };
 
@@ -60,3 +63,39 @@ export const CanvasContext =
   createContext<CanvasContextValue>(defaultValueContext);
 
 export const useCanvasContext = () => useContext(CanvasContext);
+
+export type TitleReq = { id: string; config: TitleConfig };
+
+export type TCanvasControl = {
+  selection: TypeSelection[];
+  titleHover?: TitleReq;
+  hover?: string[];
+  titleEdited?: TitleReq;
+  setSelection: (selection: TypeSelection[]) => void;
+  setTitleHover: (req: TitleReq) => void;
+  setTitleEdited: (req: TitleReq) => void;
+  setHover: (id: string) => void;
+  removeHover: (id: string) => void;
+  removeTitleHover: (id: string) => void;
+};
+
+export type TCanvasControlContext = {
+  getControl: () => TCanvasControl;
+};
+
+export const initControl: TCanvasControl = {
+  selection: [],
+  titleHover: undefined,
+  titleEdited: undefined,
+  hover: [],
+  setHover: () => undefined,
+  removeHover: () => undefined,
+  setSelection: () => undefined,
+  setTitleHover: () => undefined,
+  setTitleEdited: () => undefined,
+  removeTitleHover: () => undefined,
+};
+
+export const CanvasControlContext = createContext<TCanvasControlContext>({
+  getControl: () => initControl,
+});

@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
-import Canvas from "./packages/Canvas";
+import Canvas from "./packages/components/Canvas";
 import { ComponentAppType, ComponentBase, WindowSize } from "./packages/types";
-import Layout from "./packages/Layout";
 
 const screens: ComponentBase[] = [
   {
@@ -50,15 +49,7 @@ const Editor: React.FC = () => {
 
   if (!width || !height) return null;
 
-  return (
-    <Layout>
-      <Canvas
-        components={screens}
-        windowSize={{ width, height }}
-        defaultScale={0.5}
-      />
-    </Layout>
-  );
+  return <Canvas components={screens} layout={{ width, height }} />;
 };
 
 export default Editor;
