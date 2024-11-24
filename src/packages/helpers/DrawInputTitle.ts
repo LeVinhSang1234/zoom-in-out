@@ -9,7 +9,7 @@ export const DrawInputTitle = (
 ) => {
   const { config, id, titleConfig, width } = component;
   const { getControl, ratio = RATIO, fontSize } = config;
-  const { titleEdited } = getControl();
+  const { titleEdited, removeTitleEdited } = getControl();
   if (titleEdited?.id !== id) return;
   let input = titleEdited?.input;
   if (!input) {
@@ -23,12 +23,16 @@ export const DrawInputTitle = (
       input!.style.width = `${_width / ratio}px`;
       onChange?.(componentAppToBase(component));
     };
+    input.onkeydown = (e: any) => {
+      if (e.key === "Enter") removeTitleEdited(titleEdited.id);
+      onChange?.(componentAppToBase(component));
+    };
   }
   input.style.position = "absolute";
   input.style.left = `${titleConfig.x / ratio}px`;
   input.style.top = `${titleConfig.y / ratio}px`;
   input.style.height = `${titleConfig.height / ratio}px`;
-  input.style.maxWidth = `${(width - 6) / ratio}px`;
+  input.style.maxWidth = `${(width - 4) / ratio}px`;
   input.setAttribute("value", `${titleConfig.fullText}`);
   input.style.fontSize = `${titleConfig.fontSize / ratio}px`;
   if (!titleEdited.input) {

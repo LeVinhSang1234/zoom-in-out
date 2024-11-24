@@ -241,7 +241,7 @@ export const makeTitle = (
     heightCanvas: height + SUB * ratio,
     fontSize: fontSize * ratio,
     text,
-    fullText: text,
+    fullText: title?.trim() || "Frame",
   };
 };
 
