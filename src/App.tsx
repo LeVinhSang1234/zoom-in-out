@@ -5,7 +5,7 @@ import { ComponentAppType, ComponentBase, WindowSize } from "./packages/types";
 const screens: ComponentBase[] = [
   {
     id: "7df2236d89c2",
-    name: "Home v15",
+    title: "Home v15",
     width: 375,
     height: 667,
     x: 0,
@@ -16,7 +16,7 @@ const screens: ComponentBase[] = [
   },
   {
     id: "6e12c422cbcf",
-    name: "Page 1",
+    title: "Page 1",
     width: 375,
     height: 667,
     x: 475,
@@ -28,6 +28,8 @@ const screens: ComponentBase[] = [
 ];
 
 const Editor: React.FC = () => {
+  const [components, setComponents] = useState(screens);
+
   const [{ width, height }, setWindowSize] = useState<WindowSize>({
     width: window?.innerWidth,
     height: window?.innerHeight,
@@ -49,7 +51,17 @@ const Editor: React.FC = () => {
 
   if (!width || !height) return null;
 
-  return <Canvas components={screens} layout={{ width, height }} />;
+  return (
+    <Canvas
+      components={components}
+      layout={{ width, height }}
+      onChange={(component) => {
+        setComponents((pre) =>
+          pre.map((e) => (e.id === component.id ? component : e))
+        );
+      }}
+    />
+  );
 };
 
 export default Editor;

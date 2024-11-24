@@ -1,7 +1,7 @@
 import { Component } from "react";
 import {
   ComponentApp,
-  ComponentProps,
+  ComponentBase,
   KEYBOARD_CODE,
   WindowSize,
   Zoom,
@@ -32,16 +32,17 @@ import "./index.css";
 import { withControlProvider } from "../../context/withControlProvider";
 import { DrawInputTitle } from "../../helpers/DrawInputTitle";
 
-type Props<T> = {
+type Props = {
   layout: WindowSize;
-  components: (T & ComponentProps)[];
+  components: ComponentBase[];
+  onChange?: (component: ComponentBase) => void;
 };
 
-class CanvasBase<T> extends Component<Props<T>> {}
+class CanvasBase extends Component<Props> {}
 
-type CanvasProps<T> = Props<T> & CanvasContextValue & TCanvasControlContext;
+type CanvasProps = Props & CanvasContextValue & TCanvasControlContext;
 
-class Canvas<T> extends Component<CanvasProps<T>> {
+class Canvas extends Component<CanvasProps> {
   private canvas: HTMLCanvasElement | null;
   private ctx: CanvasRenderingContext2D | null;
   private zoom: Zoom;
@@ -50,7 +51,7 @@ class Canvas<T> extends Component<CanvasProps<T>> {
     downing: boolean; // Check mouse down sẽ cho phép drag screen
   };
 
-  constructor(props: CanvasProps<T> & CanvasContextValue) {
+  constructor(props: CanvasProps & CanvasContextValue) {
     super(props);
     this.ctx = null;
     this.canvas = null;
@@ -70,7 +71,7 @@ class Canvas<T> extends Component<CanvasProps<T>> {
     this.app = { downing: false, pressSpace: false };
   }
 
-  shouldComponentUpdate(nProps: CanvasProps<T>): boolean {
+  shouldComponentUpdate(nProps: CanvasProps): boolean {
     const { components, layout, ratio = RATIO } = this.props;
     if (components !== nProps.components || layout !== nProps.layout) {
       this.setSizeCanvas(nProps.layout, ratio);
@@ -157,7 +158,7 @@ class Canvas<T> extends Component<CanvasProps<T>> {
     this.ctx.fill();
     this.ctx.restore();
 
-    const { components, layout } = props;
+    const { components, layout, onChange } = props;
     const config = getConfig({ ...props, isSpace: this.app.pressSpace });
     const builds = components.map((component) => {
       let _com: ComponentApp = { ...component, zoom: this.zoom, config } as any;
@@ -169,7 +170,7 @@ class Canvas<T> extends Component<CanvasProps<T>> {
 
     for (const build of builds) {
       DrawName(this.ctx!, build);
-      DrawInputTitle(build);
+      DrawInputTitle(this.ctx!, build, onChange);
     }
   };
 

@@ -29,10 +29,9 @@ export type ComponentBase = {
   y: number;
   width: number;
   height: number;
-  name: string;
   title?: string;
   id: string;
-  children: ComponentApp[];
+  children: ComponentBase[];
   text?: string;
   type: ComponentAppType;
 } & CSSPropertiesProps;

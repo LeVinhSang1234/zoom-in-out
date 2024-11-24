@@ -7,7 +7,7 @@ export const DrawName = (
   const { config, cursor, id, titleConfig } = component;
   const { titlePageColor, titlePageHoverColor, getControl } = config;
   let text = titleConfig.text;
-  const { setTitleHover, removeTitleHover } = getControl();
+  const { setTitleHover, removeTitleHover, titleEdited } = getControl();
 
   ctx.save();
   ctx.beginPath();
@@ -22,7 +22,11 @@ export const DrawName = (
 
   ctx.fillStyle = !isHover ? titlePageColor : titlePageHoverColor;
   ctx.textAlign = "left";
-  ctx.fillText(text, titleConfig.xCanvas, titleConfig.yCanvas);
+  ctx.fillText(
+    titleEdited?.id !== id ? text : "",
+    titleConfig.xCanvas,
+    titleConfig.yCanvas
+  );
   ctx.closePath();
   ctx.restore();
 };

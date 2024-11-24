@@ -2,6 +2,7 @@ import { CanvasContextValue } from "./context/canvas";
 import { base64Point, RATIO } from "./conts";
 import {
   ComponentApp,
+  ComponentBase,
   CursorType,
   KEYBOARD_CODE,
   Pointer,
@@ -205,9 +206,9 @@ export const makeTitle = (
   ctx: CanvasRenderingContext2D,
   component: ComponentApp
 ) => {
-  const { width, x, y, name, title, config } = component;
+  const { width, x, y, title, config } = component;
   const { fontSize, ratio = RATIO } = config;
-  let text = title || name;
+  let text = title?.trim() || "Frame";
   ctx.save();
   ctx.font = `400 ${fontSize * ratio}px Inter, sans-serif`;
   let textWidth = ctx.measureText(text).width;
@@ -243,3 +244,34 @@ export const makeTitle = (
     fullText: text,
   };
 };
+
+export const textToWidth = (
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  config: {
+    fontSize: number;
+    ratio: number;
+  }
+) => {
+  ctx.save();
+  ctx.font = `400 ${config.fontSize * config.ratio}px Inter, sans-serif`;
+  const width = ctx.measureText(text).width;
+  ctx.restore();
+  return width;
+};
+
+export function componentAppToBase(component: ComponentApp): ComponentBase {
+  const com: ComponentBase = {
+    x: unZoomedX(component.x, component.zoom),
+    y: unZoomedY(component.y, component.zoom),
+    width: unZoomed(component.width, component.zoom),
+    height: unZoomed(component.height, component.zoom),
+    title: component.title,
+    id: component.id,
+    children: component.children.map((e) => componentAppToBase(e)),
+    text: component.text,
+    type: component.type,
+    backgroundColor: component.backgroundColor,
+  };
+  return com;
+}
