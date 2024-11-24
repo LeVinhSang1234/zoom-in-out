@@ -47,6 +47,7 @@ export type TitleConfig = {
   fullText: string;
   xCanvas: number;
   yCanvas: number;
+  heightCanvas: number;
 };
 
 export type TitleReq = { id: string; config: TitleConfig };

@@ -6,7 +6,7 @@ export const CanvasControlProvider = ({ children }: PropsWithChildren) => {
   const selection = useRef<TypeSelection[]>([]);
   const hover = useRef<string[]>([]);
   const title = useRef<TitleReq>();
-  const titleEdited = useRef<TitleReq>();
+  const titleEdited = useRef<{ id: string; input?: HTMLInputElement }>();
 
   const setSelection = useCallback((_selection: TypeSelection[]) => {
     selection.current = _selection;
@@ -16,8 +16,17 @@ export const CanvasControlProvider = ({ children }: PropsWithChildren) => {
     title.current = req;
   }, []);
 
-  const setTitleEdited = useCallback((req: TitleReq) => {
-    titleEdited.current = req;
+  const setTitleEdited = useCallback((id: string) => {
+    titleEdited.current = { id };
+  }, []);
+
+  const removeTitleEdited = useCallback((id: string) => {
+    if (titleEdited.current?.id === id) {
+      if (titleEdited.current.input) {
+        document.body.removeChild(titleEdited.current.input);
+      }
+      titleEdited.current = undefined;
+    }
   }, []);
 
   const removeTitleHover = useCallback((id: string) => {
@@ -45,6 +54,7 @@ export const CanvasControlProvider = ({ children }: PropsWithChildren) => {
       setTitleHover,
       removeTitleHover,
       setTitleEdited,
+      removeTitleEdited,
     };
   }, [
     setHover,
@@ -53,6 +63,7 @@ export const CanvasControlProvider = ({ children }: PropsWithChildren) => {
     setTitleHover,
     removeTitleHover,
     setTitleEdited,
+    removeTitleEdited,
   ]);
   return (
     <CanvasControlContext.Provider value={{ getControl }}>

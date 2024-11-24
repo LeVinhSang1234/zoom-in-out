@@ -1,5 +1,6 @@
 import { Component } from "react";
 import { clsx } from "../../utlis";
+import "./index.css";
 
 type Props = {};
 

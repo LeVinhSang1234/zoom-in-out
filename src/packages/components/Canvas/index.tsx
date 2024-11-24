@@ -30,7 +30,7 @@ import { DrawName } from "../../helpers/DrawName";
 import FPS from "../../lib/FPS";
 import "./index.css";
 import { withControlProvider } from "../../context/withControlProvider";
-import { DrawInputEdit } from "../../helpers/DrawInputEdit";
+import { DrawInputTitle } from "../../helpers/DrawInputTitle";
 
 type Props<T> = {
   layout: WindowSize;
@@ -166,9 +166,10 @@ class Canvas<T> extends Component<CanvasProps<T>> {
       return _com;
     });
     DrawFramePixel(this.ctx, { layout, zoom: this.zoom, config });
+
     for (const build of builds) {
       DrawName(this.ctx!, build);
-      DrawInputEdit(build);
+      DrawInputTitle(build);
     }
   };
 
@@ -200,11 +201,17 @@ class Canvas<T> extends Component<CanvasProps<T>> {
   private onMouseDown = () => {
     this.app.downing = true;
     if (this.app.pressSpace) this.canvasGrabbing();
+    const { getControl } = this.props;
+    const { removeTitleEdited, titleEdited, titleHover } = getControl();
+    if (!titleEdited || titleHover?.id === titleEdited?.id) return;
+    removeTitleEdited(titleEdited.id);
+    this.draw();
   };
 
   private onDoubleClick = () => {
     const { titleHover, setTitleEdited } = this.props.getControl();
-    if (titleHover) setTitleEdited(titleHover);
+    if (titleHover) setTitleEdited(titleHover.id);
+    this.draw();
   };
 
   private onMouseUp = () => {

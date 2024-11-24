@@ -70,10 +70,11 @@ export type TCanvasControl = {
   selection: TypeSelection[];
   titleHover?: TitleReq;
   hover?: string[];
-  titleEdited?: TitleReq;
+  titleEdited?: { id: string; input?: HTMLInputElement };
   setSelection: (selection: TypeSelection[]) => void;
   setTitleHover: (req: TitleReq) => void;
-  setTitleEdited: (req: TitleReq) => void;
+  setTitleEdited: (id: string) => void;
+  removeTitleEdited: (id: string) => void;
   setHover: (id: string) => void;
   removeHover: (id: string) => void;
   removeTitleHover: (id: string) => void;
@@ -94,6 +95,7 @@ export const initControl: TCanvasControl = {
   setTitleHover: () => undefined,
   setTitleEdited: () => undefined,
   removeTitleHover: () => undefined,
+  removeTitleEdited: () => undefined,
 };
 
 export const CanvasControlContext = createContext<TCanvasControlContext>({

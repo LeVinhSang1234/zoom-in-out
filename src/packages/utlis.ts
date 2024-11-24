@@ -83,7 +83,12 @@ export const makeScreen = (
   screen.cursor = {
     inTitle: () => {
       if (config.isSpace) return false;
-      return isHoved(zoom.mouse, screen.titleConfig);
+      return isHoved(zoom.mouse, {
+        width: screen.titleConfig.width,
+        height: screen.titleConfig.heightCanvas,
+        x: screen.titleConfig.xCanvas,
+        y: screen.titleConfig.y,
+      });
     },
     inScreen: () => {
       if (config.isSpace) return false;
@@ -162,6 +167,7 @@ export const getConfig = (
     isSpace,
     layout,
     getControl,
+    ratio,
   } = props;
 
   return {
@@ -183,6 +189,7 @@ export const getConfig = (
     getControl,
     isSpace,
     layout,
+    ratio,
   };
 };
 
@@ -229,7 +236,8 @@ export const makeTitle = (
     xCanvas: x,
     yCanvas: yText,
     width: textWidth,
-    height: height + SUB * ratio,
+    height,
+    heightCanvas: height + SUB * ratio,
     fontSize: fontSize * ratio,
     text,
     fullText: text,

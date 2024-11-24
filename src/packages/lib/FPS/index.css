@@ -1,0 +1,12 @@
+.fps-writer {
+  position: absolute;
+  bottom: 10px;
+  right: 11px;
+  font-size: 13px;
+  color: white;
+  font-family: Inter, sans-serif;
+}
+
+.fps-writer--warning {
+  color: #ff0000;
+}

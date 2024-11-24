@@ -123,11 +123,10 @@
     auto !important;
 }
 
-.fps-writer {
+.input-edited {
   position: absolute;
-  bottom: 10px;
-  right: 11px;
-  font-size: 13px;
-  color: white;
-  font-family: Inter, sans-serif;
+  outline: none;
+  border: none;
+  background-color: white;
+  padding: 2px;
 }

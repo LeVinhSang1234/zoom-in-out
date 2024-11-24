@@ -1,7 +1,7 @@
 export const LINE_WIDTH = 2;
-export const INIT_SCALE = 0.5;
+export const INIT_SCALE = window.devicePixelRatio / 2;
 export const FONT_SIZE = 11;
-export const RATIO = window.devicePixelRatio
+export const RATIO = window.devicePixelRatio;
 export const MIN_ZOOM = 0.04 * RATIO;
 export const SIZE_LINE_FRAME = 1 * RATIO;
 export const MAX_ZOOM = 400 * RATIO;
