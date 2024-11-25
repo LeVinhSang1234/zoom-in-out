@@ -1,6 +1,6 @@
 {
   "name": "@pdf-highlight/react-pdf-highlight",
-  "version": "1.2.2",
+  "version": "1.2.4",
   "private": false,
   "license": "UNLICENSED",
   "description": "react pdf highlight keyword",

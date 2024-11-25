@@ -10,8 +10,8 @@ function App() {
 
   return (
     <>
-      <button>change</button>
       <PDFHighlight
+        allowHtml
         debug
         onStartLoad={() => {
           console.log("start loading");

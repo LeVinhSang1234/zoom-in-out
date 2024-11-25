@@ -26,6 +26,7 @@ type Props = {
   allowHtml?: boolean;
   extractLetterSpacing?: number;
   specialWordRemoves?: string[];
+  maxKeywordLength?: number;
 };
 
 type ValueFindObject = {
@@ -63,7 +64,7 @@ class PDFHighlight extends Component<Props> {
     };
   }
 
-  isObjectEqual = (obj1: any, obj2: any) => {
+  private isObjectEqual = (obj1: any, obj2: any) => {
     if (obj1 === obj2) return true;
     if (typeof obj1 !== typeof obj2) return false;
     const obj1Keys = Object.keys(obj1);
@@ -81,7 +82,7 @@ class PDFHighlight extends Component<Props> {
     return isEqual;
   };
 
-  isEqualKeyword = (keywords?: string[], keywords2?: string[]) => {
+  private isEqualKeyword = (keywords?: string[], keywords2?: string[]) => {
     if (keywords === keywords2) return true;
     if (keywords?.length !== keywords2?.length) return false;
     if (keywords2?.some((e) => !keywords?.includes(e))) return false;
@@ -244,7 +245,13 @@ class PDFHighlight extends Component<Props> {
   ) => {
     if (!this.refCanvasWrap) return;
     const { width } = this.refCanvasWrap.getBoundingClientRect();
-    const { keywords = [], scale = 1, pageSearch, allowHtml } = props;
+    const {
+      keywords = [],
+      scale = 1,
+      pageSearch,
+      allowHtml,
+      maxKeywordLength = 2000,
+    } = props;
 
     const div = document.createElement("div");
     div.id = `wrap-canvas-page-${page}`;
@@ -278,7 +285,7 @@ class PDFHighlight extends Component<Props> {
     await renderTask.promise;
     if (pageSearch && pageSearch !== page) return;
     const promiseAll = keywords.map(async (keyword) => {
-      if (keyword.length > 2000) {
+      if (maxKeywordLength && keyword.length > maxKeywordLength) {
         console.warn("Keywords are too big: " + keyword.length + " characters");
       }
       return this.hightlightText(
@@ -413,6 +420,7 @@ class PDFHighlight extends Component<Props> {
       if (isBorderHighlight) {
         ctx.strokeStyle = colorHighlight;
         ctx.lineWidth = 1;
+        ctx.globalAlpha = 1;
       } else {
         ctx.fillStyle = colorHighlight;
         ctx.globalAlpha = 0.2;
@@ -448,41 +456,41 @@ class PDFHighlight extends Component<Props> {
 
   private parseKeyword = (word: string) => {
     const { specialWordRemoves } = this.props;
-    let keyword = word.replace(/ |\n/g, " ").trim();
+    let keyword = word.replace(/\n/g, " ").trim();
     specialWordRemoves?.forEach((key) => {
       keyword = keyword.replaceAll(key, " ");
     });
     return keyword;
   };
 
-  private removeAllSpace = (word: string) => {
+  private deleteSpace = (word: string) => {
     return word.replaceAll(" ", "");
   };
 
-  private get_end_StrA_Is_start_StrB(strA: string, strB: string) {
+  private get_end_pdf_Is_start_search(pdf: string, search: string) {
     let startIndex = -1;
-    let length = Math.min(strA.length, strB.length);
+    let length = Math.min(pdf.length, search.length);
     let longestCommon = "";
+    const strBTrim = this.deleteSpace(search);
     for (let i = length; i > 0; i--) {
-      const partOfString1 = strA.substring(strA.length - i);
-      if (
-        this.removeAllSpace(strB).startsWith(this.removeAllSpace(partOfString1))
-      ) {
-        startIndex = strA.length - i;
+      const partOfString1 = pdf.substring(pdf.length - i);
+      if (strBTrim.startsWith(this.deleteSpace(partOfString1))) {
+        startIndex = pdf.length - i;
         longestCommon = partOfString1;
+        break;
       }
     }
     return { longestCommon, startIndex };
   }
 
-  private get_start_StrA_Is_start_StrB(strA: string, strB: string) {
+  private get_start_pdf_Is_start_search(pdf: string, search: string) {
     let startIndex = -1;
-    let length = Math.min(strA.length, strB.length);
+    let length = Math.min(pdf.length, search.length);
     let longestCommon = "";
-    const strBTrim = this.removeAllSpace(strB);
+    const strBTrim = this.deleteSpace(search);
     for (let i = 1; i <= length; i++) {
-      const partOfString1 = strA.substring(0, i);
-      if (strBTrim.startsWith(this.removeAllSpace(partOfString1))) {
+      const partOfString1 = pdf.substring(0, i);
+      if (strBTrim.startsWith(this.deleteSpace(partOfString1))) {
         startIndex = i - partOfString1.length;
         longestCommon = partOfString1;
       }
@@ -494,8 +502,11 @@ class PDFHighlight extends Component<Props> {
     contents: Contents[],
     keyword: string
   ): ValueFindObject => {
-    const { debug } = this.props;
-    let stringSearch = this.parseKeyword(keyword).substring(0, 5000);
+    const { debug, maxKeywordLength = 2000 } = this.props;
+    let stringSearch = this.parseKeyword(keyword).substring(
+      0,
+      maxKeywordLength || 2000
+    );
     const object = contents.find((e) => e.str.includes(stringSearch));
     if (debug && __DEV__) {
       console.log(
@@ -504,10 +515,11 @@ class PDFHighlight extends Component<Props> {
       console.info(contents);
     }
     if (object) {
-      const { startIndex, longestCommon } = this.get_end_StrA_Is_start_StrB(
-        this.parseKeyword(object.str),
-        stringSearch
-      );
+      const strs = this.parseKeyword(object.str).split(stringSearch);
+      const { startIndex, longestCommon } = {
+        startIndex: strs[0].length,
+        longestCommon: strs[0],
+      };
       if (debug && __DEV__) {
         console.info("start matching => ", startIndex, "keyword => ", keyword);
       }
@@ -529,19 +541,18 @@ class PDFHighlight extends Component<Props> {
       const str = this.parseKeyword(contents[i].str);
       if (!str.trim()) continue;
       if (!values.objects.length) {
-        const { startIndex, longestCommon } = this.get_end_StrA_Is_start_StrB(
+        const { startIndex, longestCommon } = this.get_end_pdf_Is_start_search(
           str,
           stringSearch
         );
         if (startIndex > -1) {
           values.objects.push(contents[i]);
-          values.begin = startIndex; //index start of object first
+          values.begin = startIndex;
           values.matching = longestCommon;
-          stringSearch = stringSearch
-            .trim()
-            .substring(str.length - startIndex, stringSearch.length);
+          stringSearch = stringSearch.trim().replace(longestCommon.trim(), "");
           if (debug && __DEV__) {
             console.info(
+              "get_end_pdf_Is_start_search",
               "start matching => ",
               startIndex,
               "keyword => ",
@@ -554,7 +565,7 @@ class PDFHighlight extends Component<Props> {
         continue;
       }
       if (!stringSearch.trim()) break;
-      const { startIndex, longestCommon } = this.get_start_StrA_Is_start_StrB(
+      const { startIndex, longestCommon } = this.get_start_pdf_Is_start_search(
         str,
         stringSearch
       );
@@ -564,7 +575,7 @@ class PDFHighlight extends Component<Props> {
         stringSearch = stringSearch
           .trim()
           .substring(startIndex + longestCommon.length, stringSearch.length);
-        values.end = longestCommon.length; //index start of object last
+        values.end = longestCommon.length;
         if (debug && __DEV__) {
           console.info(values.matching);
         }
