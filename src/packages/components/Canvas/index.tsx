@@ -203,9 +203,16 @@ class Canvas extends Component<CanvasProps> {
     this.app.downing = true;
     if (this.app.pressSpace) this.canvasGrabbing();
     const { getControl } = this.props;
-    const { removeTitleEdited, titleEdited, titleHover } = getControl();
-    if (!titleEdited || titleHover?.id === titleEdited?.id) return;
-    removeTitleEdited(titleEdited.id);
+    const control = getControl();
+    const { titleEdited, titleHover, setSelection } = control;
+
+    if (titleHover?.id) {
+      setSelection([titleHover.id]);
+    } else setSelection([]);
+
+    if (titleEdited && titleHover?.id !== titleEdited?.id) {
+      control.removeTitleEdited(titleEdited.id);
+    }
     this.draw();
   };
 

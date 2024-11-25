@@ -17,7 +17,7 @@ import {
   TITLE_PAGE_HOVER_COLOR,
   RATIO,
 } from "../conts";
-import { TitleConfig, TypeSelection } from "../types";
+import { TitleConfig } from "../types";
 
 export type CanvasContextValue = {
   lineWidth: number;
@@ -67,11 +67,11 @@ export const useCanvasContext = () => useContext(CanvasContext);
 export type TitleReq = { id: string; config: TitleConfig };
 
 export type TCanvasControl = {
-  selection: TypeSelection[];
+  selection: string[];
   titleHover?: TitleReq;
   hover?: string[];
   titleEdited?: { id: string; input?: HTMLInputElement };
-  setSelection: (selection: TypeSelection[]) => void;
+  setSelection: (selection: string[]) => void;
   setTitleHover: (req: TitleReq) => void;
   setTitleEdited: (id: string) => void;
   removeTitleEdited: (id: string) => void;

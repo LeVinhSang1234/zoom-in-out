@@ -22,8 +22,6 @@ export type CSSPropertiesProps = {
 
 export type Pointer = { x: number; y: number };
 
-export type TypeSelection = { paths: string[]; id: string };
-
 export type ComponentBase = {
   x: number;
   y: number;

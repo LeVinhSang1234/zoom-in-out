@@ -1,14 +1,14 @@
 import { CanvasControlContext, TCanvasControl } from "../context/canvas";
-import { TitleReq, TypeSelection } from "../types";
+import { TitleReq } from "../types";
 import { PropsWithChildren, useCallback, useRef } from "react";
 
 export const CanvasControlProvider = ({ children }: PropsWithChildren) => {
-  const selection = useRef<TypeSelection[]>([]);
+  const selection = useRef<string[]>([]);
   const hover = useRef<string[]>([]);
   const title = useRef<TitleReq>();
   const titleEdited = useRef<{ id: string; input?: HTMLInputElement }>();
 
-  const setSelection = useCallback((_selection: TypeSelection[]) => {
+  const setSelection = useCallback((_selection: string[]) => {
     selection.current = _selection;
   }, []);
 
