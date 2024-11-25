@@ -2,10 +2,10 @@ import { CanvasContextValue } from "./context/canvas";
 import { base64Point, RATIO } from "./conts";
 import {
   ComponentApp,
-  ComponentBase,
   CursorType,
   KEYBOARD_CODE,
   Pointer,
+  TitleConfig,
   WindowSize,
   Zoom,
 } from "./types";
@@ -71,16 +71,11 @@ export const zoomedY_INV = (number: number, zoom: Zoom) => {
 
 // converts from world coord to screen pixel coord
 // tính toán lại component
-export const makeScreen = (
+export const makeComponent = (
   ctx: CanvasRenderingContext2D,
   screen: ComponentApp
 ) => {
   const { zoom, config } = screen;
-  screen.x = zoomedX(screen.x, zoom);
-  screen.y = zoomedY(screen.y, zoom);
-  screen.width = zoomed(screen.width, zoom);
-  screen.height = zoomed(screen.height, zoom);
-  makeTitle(ctx, screen);
   screen.cursor = {
     inTitle: () => {
       if (config.isSpace) return false;
@@ -93,7 +88,12 @@ export const makeScreen = (
     },
     inScreen: () => {
       if (config.isSpace) return false;
-      const isHovePage = isHoved(zoom.mouse, screen);
+      const isHovePage = isHoved(zoom.mouse, {
+        width: zoomed(screen.width, screen.zoom),
+        height: zoomed(screen.height, screen.zoom),
+        x: zoomedX(screen.x, screen.zoom),
+        y: zoomedY(screen.y, screen.zoom),
+      });
       return isHovePage;
     },
   };
@@ -204,45 +204,50 @@ export const clsx = (...args: any[]) => {
 const SUB = 9;
 export const makeTitle = (
   ctx: CanvasRenderingContext2D,
-  component: ComponentApp
+  screen: ComponentApp
 ) => {
-  const { width, x, y, title, config } = component;
+  const { width, x, y, title, config, zoom } = screen;
+
+  const _x = zoomedX(x, zoom);
+  const _y = zoomedY(y, zoom);
+  const _width = zoomed(width, zoom);
+
   const { fontSize, ratio = RATIO } = config;
-  let text = title?.trim() || "Frame";
+  let text = title || "";
   ctx.save();
   ctx.font = `400 ${fontSize * ratio}px Inter, sans-serif`;
   let textWidth = ctx.measureText(text).width;
-  if (textWidth > width) {
+  if (textWidth > _width) {
     const ellipsis = "...";
     let truncatedText = text.slice(0, -1);
     while (
       truncatedText.length > 1 &&
-      ctx.measureText(truncatedText + ellipsis).width > width
+      ctx.measureText(truncatedText + ellipsis).width > _width
     ) {
       truncatedText = truncatedText.slice(0, -1);
     }
     text = truncatedText + ellipsis;
   }
   const height = fontSize * ratio;
-  const yText = y - SUB * ratio;
+  const yText = _y - SUB * ratio;
   textWidth = ctx.measureText(text).width;
-  if (textWidth > width) {
+  if (textWidth > _width) {
     text = "...";
-    textWidth = width;
+    textWidth = _width;
   }
   ctx.restore();
-  component.titleConfig = {
-    x,
+  screen.titleConfig = {
+    x: _x,
     y: yText - height,
-    xCanvas: x,
+    xCanvas: _x,
     yCanvas: yText,
     width: textWidth,
     height,
     heightCanvas: height + SUB * ratio,
     fontSize: fontSize * ratio,
     text,
-    fullText: title?.trim() || "Frame",
-  };
+    fullText: title || "Frame",
+  } as TitleConfig;
 };
 
 export const textToWidth = (
@@ -259,19 +264,3 @@ export const textToWidth = (
   ctx.restore();
   return width;
 };
-
-export function componentAppToBase(component: ComponentApp): ComponentBase {
-  const com: ComponentBase = {
-    x: unZoomedX(component.x, component.zoom),
-    y: unZoomedY(component.y, component.zoom),
-    width: unZoomed(component.width, component.zoom),
-    height: unZoomed(component.height, component.zoom),
-    title: component.title,
-    id: component.id,
-    children: component.children.map((e) => componentAppToBase(e)),
-    text: component.text,
-    type: component.type,
-    backgroundColor: component.backgroundColor,
-  };
-  return com;
-}

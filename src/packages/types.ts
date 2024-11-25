@@ -45,6 +45,7 @@ export type TitleConfig = {
   xCanvas: number;
   yCanvas: number;
   heightCanvas: number;
+  onChange: (title: string) => void;
 };
 
 export type TitleReq = { id: string; config: TitleConfig };
@@ -93,3 +94,14 @@ export enum MouseType {
 }
 
 export type Point = [number, number];
+
+export enum ModeResize {
+  LEFT = "left",
+  TOP_LEFT = "topLeft",
+  BOTTOM_LEFT = "bottomLeft",
+  RIGHT = "right",
+  TOP_RIGHT = "topRight",
+  BOTTOM_RIGHT = "bottomRight",
+  TOP = "top",
+  BOTTOM = "bottom",
+}

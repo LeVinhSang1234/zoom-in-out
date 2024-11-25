@@ -1,7 +1,15 @@
 import { ComponentApp } from "../types";
+import { zoomed, zoomedX, zoomedY } from "../utlis";
 
-export const DrawPage = (ctx: CanvasRenderingContext2D, screen: ComponentApp) => {
+export const DrawPage = (
+  ctx: CanvasRenderingContext2D,
+  screen: ComponentApp
+) => {
   const { x, y, width, height, cursor, backgroundColor, config, id } = screen;
+  const _x = zoomedX(x, screen.zoom);
+  const _y = zoomedY(y, screen.zoom);
+  const _width = zoomed(width, screen.zoom);
+  const _height = zoomed(height, screen.zoom);
   const { lineWidth, initScale, colorBorderHoverGroup, getControl } = config;
   const { setHover, removeHover } = getControl();
   const isHoverScreen = cursor.inScreen();
@@ -16,13 +24,13 @@ export const DrawPage = (ctx: CanvasRenderingContext2D, screen: ComponentApp) =>
   ctx.save();
   ctx.beginPath();
   ctx.fillStyle = backgroundColor || "#ffffff";
-  ctx.fillRect(x, y, width, height);
+  ctx.fillRect(_x, _y, _width, _height);
   if (isHover) {
     const lineW = lineWidth * initScale;
     const half = lineW / 2;
     ctx.lineWidth = isHover ? lineWidth : 0;
     ctx.strokeStyle = colorBorderHoverGroup;
-    ctx.strokeRect(x - half, y - half, width + lineW, height + lineW);
+    ctx.strokeRect(_x - half, _y - half, _width + lineW, _height + lineW);
   }
   ctx.closePath();
   ctx.restore();

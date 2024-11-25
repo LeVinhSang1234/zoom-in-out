@@ -37,6 +37,7 @@ export type CanvasContextValue = {
   sizeGridSquare: number;
   isSpace?: boolean;
   ratio?: number;
+  sizeBoxResize?: number;
 } & TCanvasControlContext;
 
 export const defaultValueContext: CanvasContextValue & TCanvasControlContext = {
@@ -56,6 +57,7 @@ export const defaultValueContext: CanvasContextValue & TCanvasControlContext = {
   titlePageColor: TITLE_PAGE_COLOR,
   titlePageHoverColor: TITLE_PAGE_HOVER_COLOR,
   ratio: RATIO,
+  sizeBoxResize: 12 / RATIO,
   getControl: () => initControl,
 };
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Canvas from "./packages/components/Canvas";
 import { ComponentAppType, ComponentBase, WindowSize } from "./packages/types";
 
@@ -28,7 +28,11 @@ const screens: ComponentBase[] = [
 ];
 
 const Editor: React.FC = () => {
-  const [components, setComponents] = useState(screens);
+  const components = useRef(screens);
+
+  useEffect(() => {
+    (window as any).components = components.current;
+  }, []);
 
   const [{ width, height }, setWindowSize] = useState<WindowSize>({
     width: window?.innerWidth,
@@ -51,17 +55,7 @@ const Editor: React.FC = () => {
 
   if (!width || !height) return null;
 
-  return (
-    <Canvas
-      components={components}
-      layout={{ width, height }}
-      onChange={(component) => {
-        setComponents((pre) =>
-          pre.map((e) => (e.id === component.id ? component : e))
-        );
-      }}
-    />
-  );
+  return <Canvas components={components.current} layout={{ width, height }} />;
 };
 
 export default Editor;

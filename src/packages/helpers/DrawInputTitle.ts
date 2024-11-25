@@ -1,36 +1,35 @@
 import { RATIO } from "../conts";
-import { ComponentApp, ComponentBase } from "../types";
-import { componentAppToBase, textToWidth } from "../utlis";
+import { ComponentApp } from "../types";
 
 export const DrawInputTitle = (
   ctx: CanvasRenderingContext2D,
-  component: ComponentApp,
-  onChange?: (com: ComponentBase) => void
+  component: ComponentApp
 ) => {
   const { config, id, titleConfig, width } = component;
-  const { getControl, ratio = RATIO, fontSize } = config;
+  const { getControl, ratio = RATIO } = config;
   const { titleEdited, removeTitleEdited } = getControl();
   if (titleEdited?.id !== id) return;
   let input = titleEdited?.input;
   if (!input) {
     input = document.createElement("input");
     document.body.appendChild(input);
-    input.className = "input-edited";
-    input.style.width = `${titleConfig.width / ratio}px`;
+    input.className = "input-edited __no-edit";
     input.oninput = (e: any) => {
-      component.title = e.target.value;
-      const _width = textToWidth(ctx, component.title!, { fontSize, ratio });
-      input!.style.width = `${_width / ratio}px`;
-      onChange?.(componentAppToBase(component));
+      titleConfig.onChange(e.target.value);
     };
     input.onkeydown = (e: any) => {
-      if (e.key === "Enter") removeTitleEdited(titleEdited.id);
-      onChange?.(componentAppToBase(component));
+      if (e.key === "Enter") {
+        removeTitleEdited(titleEdited.id);
+        titleConfig.onChange(e.target.value.trim() || "Frame");
+      }
+    };
+    input.onblur = (e: any) => {
+      titleConfig.onChange(e.target.value.trim() || "Frame");
     };
   }
-  input.style.position = "absolute";
   input.style.left = `${titleConfig.x / ratio}px`;
   input.style.top = `${titleConfig.y / ratio}px`;
+  input.style.width = `${titleConfig.width / ratio}px`;
   input.style.height = `${titleConfig.height / ratio}px`;
   input.style.maxWidth = `${(width - 4) / ratio}px`;
   input.setAttribute("value", `${titleConfig.fullText}`);

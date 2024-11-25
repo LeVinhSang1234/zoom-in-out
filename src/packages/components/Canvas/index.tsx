@@ -12,7 +12,8 @@ import {
   getMaxHeightSize,
   getMaxWidthSize,
   getSize,
-  makeScreen,
+  makeComponent,
+  makeTitle,
   zoomedX_INV,
   zoomedY_INV,
 } from "../../utlis";
@@ -28,14 +29,13 @@ import {
 } from "../../context/canvas";
 import { DrawName } from "../../helpers/DrawName";
 import FPS from "../../lib/FPS";
-import "./index.css";
 import { withControlProvider } from "../../context/withControlProvider";
+import "./index.css";
 import { DrawInputTitle } from "../../helpers/DrawInputTitle";
 
 type Props = {
   layout: WindowSize;
   components: ComponentBase[];
-  onChange?: (component: ComponentBase) => void;
 };
 
 class CanvasBase extends Component<Props> {}
@@ -72,8 +72,8 @@ class Canvas extends Component<CanvasProps> {
   }
 
   shouldComponentUpdate(nProps: CanvasProps): boolean {
-    const { components, layout, ratio = RATIO } = this.props;
-    if (components !== nProps.components || layout !== nProps.layout) {
+    const { layout, ratio = RATIO } = this.props;
+    if (layout !== nProps.layout) {
       this.setSizeCanvas(nProps.layout, ratio);
       this.draw();
     }
@@ -146,7 +146,7 @@ class Canvas extends Component<CanvasProps> {
     this.draw();
   };
 
-  private draw = (props = this.props) => {
+  draw = (props = this.props) => {
     if (!this.ctx || !this.canvas) return;
     const { width, height } = this.canvas;
     this.ctx.clearRect(0, 0, width, height);
@@ -158,19 +158,24 @@ class Canvas extends Component<CanvasProps> {
     this.ctx.fill();
     this.ctx.restore();
 
-    const { components, layout, onChange } = props;
+    const { layout } = props;
+    const components = props.components as ComponentApp[];
     const config = getConfig({ ...props, isSpace: this.app.pressSpace });
-    const builds = components.map((component) => {
-      let _com: ComponentApp = { ...component, zoom: this.zoom, config } as any;
-      makeScreen(this.ctx!, _com);
-      DrawPage(this.ctx!, _com);
-      return _com;
-    });
+    for (const component of components) {
+      component.zoom = this.zoom;
+      component.config = config;
+      makeTitle(this.ctx!, component);
+      component.titleConfig.onChange = (title: string) => {
+        component.title = title;
+        this.draw();
+      };
+      makeComponent(this.ctx!, component);
+      DrawPage(this.ctx!, component);
+    }
     DrawFramePixel(this.ctx, { layout, zoom: this.zoom, config });
-
-    for (const build of builds) {
-      DrawName(this.ctx!, build);
-      DrawInputTitle(this.ctx!, build, onChange);
+    for (const component of components) {
+      DrawName(this.ctx!, component);
+      DrawInputTitle(this.ctx!, component);
     }
   };
 
