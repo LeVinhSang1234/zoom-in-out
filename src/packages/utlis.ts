@@ -4,6 +4,7 @@ import {
   ComponentApp,
   CursorType,
   KEYBOARD_CODE,
+  ModeResize,
   Pointer,
   TitleConfig,
   WindowSize,
@@ -263,4 +264,29 @@ export const textToWidth = (
   const width = ctx.measureText(text).width;
   ctx.restore();
   return width;
+};
+
+export const checkModeResize = (
+  screen: ComponentApp
+): ModeResize | undefined => {
+  const { x, y, width, height, zoom } = screen;
+  const _x = zoomedX(x, zoom);
+  const _y = zoomedY(y, zoom);
+  const _w = zoomed(width, zoom);
+  const _h = zoomed(height, zoom);
+  const sc = { x: _x, y: _y, width: _w, height: _h };
+  const { mouse } = zoom;
+
+  let isHover: ModeResize | undefined;
+  const hoverTop = isHoved(mouse, { ...sc, y: _y - 4, height: 8 });
+  if (hoverTop) {
+    isHover = ModeResize.TOP;
+  } else if (!isHover && isHoved(mouse, { ...sc, x: _x - 4, width: 8 })) {
+    isHover = ModeResize.LEFT;
+  } else if (!isHover && isHoved(mouse, { ...sc, x: _x + _w - 4, width: 8 })) {
+    isHover = ModeResize.RIGHT;
+  } else if (!isHover && isHoved(mouse, { ...sc, y: _y + _h - 4, height: 8 })) {
+    isHover = ModeResize.BOTTOM;
+  }
+  return isHover;
 };

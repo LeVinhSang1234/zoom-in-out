@@ -1,5 +1,5 @@
 import { ComponentApp } from "../types";
-import { zoomed, zoomedX, zoomedY } from "../utlis";
+import { checkModeResize, zoomed, zoomedX, zoomedY } from "../utlis";
 
 export const DrawPage = (
   ctx: CanvasRenderingContext2D,
@@ -11,7 +11,7 @@ export const DrawPage = (
   const _width = zoomed(width, screen.zoom);
   const _height = zoomed(height, screen.zoom);
   const { lineWidth, initScale, colorBorderHoverGroup, getControl } = config;
-  const { setHover, removeHover } = getControl();
+  const { setHover, removeHover, selection } = getControl();
   const isHoverScreen = cursor.inScreen();
   const isHoverTitle = cursor.inTitle();
   const isHover = isHoverScreen || isHoverTitle;
@@ -19,6 +19,11 @@ export const DrawPage = (
   if (isHover) {
     setHover(id);
   } else removeHover(id);
+
+  if (selection[0] === id && isHover) {
+    const mode = checkModeResize(screen);
+    console.log("mode", mode);
+  }
 
   /*------- Frame page -------*/
   ctx.save();
