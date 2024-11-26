@@ -7,9 +7,8 @@ export const DrawBoxResize = (
   screen: ComponentApp
 ) => {
   const { zoom, config, x, y, width, height, cursor, id } = screen;
-  const { lineWidth, initScale, colorBorderHoverGroup, getControl, isSpace } =
-    config;
-  const { selection } = getControl();
+  const { lineWidth, initScale, isPressSpace } = config;
+  const { selection } = config.getControl();
 
   const isHoverScreen = cursor.inScreen();
   const isHoverTitle = cursor.inTitle();
@@ -17,9 +16,11 @@ export const DrawBoxResize = (
   const isSelection = selection[0] === id;
   if (!isHover && !isSelection) return;
 
-  if (isSelection && !isSpace) {
+  if (isSelection && !isPressSpace) {
     const mode = checkModeResize(screen);
-    cursor.setModeResize(mode);
+    if (!cursor.downing || !cursor.mode || mode) {
+      cursor.triggerModeResize(mode);
+    }
   }
 
   ctx.save();
@@ -28,7 +29,7 @@ export const DrawBoxResize = (
   const _y = zoomedY(y, zoom);
   const _width = zoomed(width, zoom);
   const _height = zoomed(height, zoom);
-  ctx.strokeStyle = colorBorderHoverGroup;
+  ctx.strokeStyle = config.colorBorderHoverGroup;
   const lineW = lineWidth * (!isHover ? initScale : 1);
   const half = lineW / 2;
   ctx.lineWidth = lineW;

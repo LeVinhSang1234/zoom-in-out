@@ -17,27 +17,11 @@ import {
   RATIO,
   SIZE_BOX_RESIZE,
 } from "../conts";
-import { TitleConfig } from "../types";
-
-export type CanvasContextValue = {
-  lineWidth: number;
-  fontSize: number;
-  minZoom: number;
-  maxZoom: number;
-  sizeLineFrame: number;
-  colorBorderHoverElement: string;
-  colorBorderHoverGroup: string;
-  backgroundColor: string;
-  backgroundColorMenu: string;
-  framePixelColor: string;
-  titlePageColor: string;
-  titlePageHoverColor: string;
-  scaleVisibleFrame: number;
-  initScale: number;
-  isSpace?: boolean;
-  ratio?: number;
-  sizeBoxResize?: number;
-} & TCanvasControlContext;
+import {
+  CanvasContextValue,
+  TCanvasControl,
+  TCanvasControlContext,
+} from "../types";
 
 export const defaultValueContext: CanvasContextValue & TCanvasControlContext = {
   lineWidth: LINE_WIDTH,
@@ -63,26 +47,6 @@ export const CanvasContext =
   createContext<CanvasContextValue>(defaultValueContext);
 
 export const useCanvasContext = () => useContext(CanvasContext);
-
-export type TitleReq = { id: string; config: TitleConfig };
-
-export type TCanvasControl = {
-  selection: string[];
-  titleHover?: TitleReq;
-  hover?: string[];
-  titleEdited?: { id: string; input?: HTMLInputElement };
-  setSelection: (selection: string[]) => void;
-  setTitleHover: (req: TitleReq) => void;
-  setTitleEdited: (id: string) => void;
-  removeTitleEdited: (id: string) => void;
-  setHover: (id: string) => void;
-  removeHover: (id: string) => void;
-  removeTitleHover: (id: string) => void;
-};
-
-export type TCanvasControlContext = {
-  getControl: () => TCanvasControl;
-};
 
 export const initControl: TCanvasControl = {
   selection: [],

@@ -1,6 +1,6 @@
-import { CanvasContextValue } from "./context/canvas";
 import { base64Point, RATIO, SIZE_BOX_RESIZE } from "./conts";
 import {
+  CanvasContextValue,
   ComponentApp,
   ComponentCursor,
   CursorType,
@@ -71,16 +71,11 @@ export const zoomedY_INV = (number: number, zoom: Zoom) => {
   return (number - screenOrigin.y) / scale + worldOrigin.y;
 };
 
-// converts from world coord to screen pixel coord
-// tính toán lại component
-export const makeComponent = (
-  ctx: CanvasRenderingContext2D,
-  screen: ComponentApp
-) => {
+export const configCursor = (screen: ComponentApp) => {
   const { zoom, config } = screen;
   screen.cursor = {
     inTitle: () => {
-      if (config.isSpace) return false;
+      if (config.isPressSpace) return false;
       return isHoved(zoom.mouse, {
         width: screen.titleConfig.width,
         height: screen.titleConfig.heightCanvas,
@@ -89,7 +84,7 @@ export const makeComponent = (
       });
     },
     inScreen: () => {
-      if (config.isSpace) return false;
+      if (config.isPressSpace) return false;
       const isHovePage = isHoved(zoom.mouse, {
         width: zoomed(screen.width, screen.zoom),
         height: zoomed(screen.height, screen.zoom),
@@ -166,7 +161,7 @@ export const getConfig = (
     backgroundColorMenu,
     titlePageColor,
     titlePageHoverColor,
-    isSpace,
+    isPressSpace,
     layout,
     getControl,
     ratio,
@@ -188,7 +183,7 @@ export const getConfig = (
     titlePageColor,
     titlePageHoverColor,
     getControl,
-    isSpace,
+    isPressSpace,
     layout,
     ratio,
   };
@@ -281,21 +276,25 @@ export const checkModeResize = (
   const box = { width: size, height: size };
   const hafl = sizeBoxResize / 2;
 
-  let isHover: ModeResize | undefined;
+  let mode: ModeResize | undefined;
   if (isHoved(mouse, { ...box, x: _x - hafl, y: _y - hafl })) {
-    isHover = ModeResize.TOP_LEFT;
+    mode = ModeResize.TOP_LEFT;
   } else if (isHoved(mouse, { ...box, x: _x - hafl + _w, y: _y - hafl })) {
-    isHover = ModeResize.TOP_RIGHT;
+    mode = ModeResize.TOP_RIGHT;
+  } else if (isHoved(mouse, { ...box, x: _x - hafl + _w, y: _y - hafl + _h })) {
+    mode = ModeResize.BOTTOM_RIGHT;
+  } else if (isHoved(mouse, { ...box, x: _x - hafl, y: _y - hafl + _h })) {
+    mode = ModeResize.BOTTOM_LEFT;
   } else if (isHoved(mouse, { ...sc, y: _y - 4, height: 8 })) {
-    isHover = ModeResize.TOP;
+    mode = ModeResize.TOP;
   } else if (isHoved(mouse, { ...sc, x: _x - 4, width: 8 })) {
-    isHover = ModeResize.LEFT;
+    mode = ModeResize.LEFT;
   } else if (isHoved(mouse, { ...sc, x: _x + _w - 4, width: 8 })) {
-    isHover = ModeResize.RIGHT;
+    mode = ModeResize.RIGHT;
   } else if (isHoved(mouse, { ...sc, y: _y + _h - 4, height: 8 })) {
-    isHover = ModeResize.BOTTOM;
+    mode = ModeResize.BOTTOM;
   }
-  return isHover;
+  return mode;
 };
 
 export const addClass = (
@@ -314,4 +313,12 @@ export const removeClass = (
   if (!element) return;
   if (!element.className.includes(className)) return;
   element.className = element.className.replaceAll(className, "").trim();
+};
+
+export const changeClass = (
+  element: HTMLElement | null | undefined,
+  className: string
+) => {
+  if (!element) return;
+  element.className = className;
 };

@@ -1,5 +1,5 @@
-import { CanvasControlContext, TCanvasControl } from "../context/canvas";
-import { TitleReq } from "../types";
+import { CanvasControlContext } from "../context/canvas";
+import { TCanvasControl, TitleReq } from "../types";
 import { PropsWithChildren, useCallback, useRef } from "react";
 
 export const CanvasControlProvider = ({ children }: PropsWithChildren) => {

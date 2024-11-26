@@ -1,5 +1,3 @@
-import { CanvasContextValue } from "./context/canvas";
-
 export type Bounds = {
   x: number;
   y: number;
@@ -48,14 +46,14 @@ export type TitleConfig = {
   onChange: (title: string) => void;
 };
 
-export type TitleReq = { id: string; config: TitleConfig };
-
 export type ComponentProps = {} & WindowSize & Pointer;
 
 export type ComponentCursor = {
   inScreen: () => boolean;
   inTitle: () => boolean;
-  setModeResize: (mode?: ModeResize) => void;
+  triggerModeResize: (mode?: ModeResize) => void;
+  mode?: ModeResize;
+  downing?: boolean;
 };
 
 export type ComponentApp = {
@@ -78,6 +76,46 @@ export type Zoom = {
     // x:  vị trí chuột x thực tế trên màn hình
     // y: vị trí chuột y thực tế trên màn hình
   };
+};
+
+export type CanvasContextValue = {
+  lineWidth: number;
+  fontSize: number;
+  minZoom: number;
+  maxZoom: number;
+  sizeLineFrame: number;
+  colorBorderHoverElement: string;
+  colorBorderHoverGroup: string;
+  backgroundColor: string;
+  backgroundColorMenu: string;
+  framePixelColor: string;
+  titlePageColor: string;
+  titlePageHoverColor: string;
+  scaleVisibleFrame: number;
+  initScale: number;
+  isPressSpace?: boolean;
+  ratio?: number;
+  sizeBoxResize?: number;
+} & TCanvasControlContext;
+
+export type TitleReq = { id: string; config: TitleConfig };
+
+export type TCanvasControl = {
+  selection: string[];
+  titleHover?: TitleReq;
+  hover?: string[];
+  titleEdited?: { id: string; input?: HTMLInputElement };
+  setSelection: (selection: string[]) => void;
+  setTitleHover: (req: TitleReq) => void;
+  setTitleEdited: (id: string) => void;
+  removeTitleEdited: (id: string) => void;
+  setHover: (id: string) => void;
+  removeHover: (id: string) => void;
+  removeTitleHover: (id: string) => void;
+};
+
+export type TCanvasControlContext = {
+  getControl: () => TCanvasControl;
 };
 
 export enum CursorType {

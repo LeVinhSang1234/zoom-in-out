@@ -1,6 +1,5 @@
-import { CanvasContextValue } from "../context/canvas";
 import { RATIO } from "../conts";
-import { WindowSize, Zoom } from "../types";
+import { CanvasContextValue, WindowSize, Zoom } from "../types";
 import { getSize, zoomedX, zoomedX_INV, zoomedY, zoomedY_INV } from "../utlis";
 
 const scaleLine = 0.3;

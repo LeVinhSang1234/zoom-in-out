@@ -1,5 +1,6 @@
 import { ComponentType, forwardRef, PropsWithoutRef, useContext } from "react";
-import { CanvasControlContext, TCanvasControlContext } from "./canvas";
+import { CanvasControlContext } from "./canvas";
+import { TCanvasControlContext } from "../types";
 
 export function withControlProvider<T, Type>(
   Component: ComponentType<T & TCanvasControlContext>

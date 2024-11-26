@@ -1,6 +1,7 @@
 import { ComponentType, forwardRef, PropsWithoutRef } from "react";
-import { CanvasContextValue, useCanvasContext } from "./canvas";
+import { useCanvasContext } from "./canvas";
 import { CanvasControlProvider } from "../provider/CanvasControl";
+import { CanvasContextValue } from "../types";
 
 export function withCanvasProvider<T, Type>(
   Component: ComponentType<T & CanvasContextValue>

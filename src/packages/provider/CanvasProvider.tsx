@@ -1,9 +1,6 @@
 import { Component, ReactNode } from "react";
-import {
-  CanvasContext,
-  CanvasContextValue,
-  defaultValueContext,
-} from "../context/canvas";
+import { CanvasContext, defaultValueContext } from "../context/canvas";
+import { CanvasContextValue } from "../types";
 
 type Props = {
   children?: ReactNode;
