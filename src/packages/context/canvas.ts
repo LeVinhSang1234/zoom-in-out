@@ -12,10 +12,10 @@ import {
   FRAME_PIXEL_COLOR,
   SCALE_VISIBLE_FRAME,
   INIT_SCALE,
-  SIZE_GRID_SQUARE,
   TITLE_PAGE_COLOR,
   TITLE_PAGE_HOVER_COLOR,
   RATIO,
+  SIZE_BOX_RESIZE,
 } from "../conts";
 import { TitleConfig } from "../types";
 
@@ -34,7 +34,6 @@ export type CanvasContextValue = {
   titlePageHoverColor: string;
   scaleVisibleFrame: number;
   initScale: number;
-  sizeGridSquare: number;
   isSpace?: boolean;
   ratio?: number;
   sizeBoxResize?: number;
@@ -53,11 +52,10 @@ export const defaultValueContext: CanvasContextValue & TCanvasControlContext = {
   framePixelColor: FRAME_PIXEL_COLOR,
   scaleVisibleFrame: SCALE_VISIBLE_FRAME,
   initScale: INIT_SCALE,
-  sizeGridSquare: SIZE_GRID_SQUARE,
   titlePageColor: TITLE_PAGE_COLOR,
   titlePageHoverColor: TITLE_PAGE_HOVER_COLOR,
   ratio: RATIO,
-  sizeBoxResize: 12 / RATIO,
+  sizeBoxResize: SIZE_BOX_RESIZE,
   getControl: () => initControl,
 };
 

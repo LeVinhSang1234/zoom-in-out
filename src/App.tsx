@@ -12,7 +12,6 @@ const screens: ComponentBase[] = [
     y: 0,
     children: [],
     type: ComponentAppType.SCREEN,
-    backgroundColor: "#F8C8A5",
   },
   {
     id: "6e12c422cbcf",
@@ -23,7 +22,6 @@ const screens: ComponentBase[] = [
     y: 0,
     children: [],
     type: ComponentAppType.SCREEN,
-    backgroundColor: "#F8C8A5",
   },
 ];
 

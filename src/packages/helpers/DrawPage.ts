@@ -1,5 +1,5 @@
 import { ComponentApp } from "../types";
-import { checkModeResize, zoomed, zoomedX, zoomedY } from "../utlis";
+import { zoomed, zoomedX, zoomedY } from "../utlis";
 
 export const DrawPage = (
   ctx: CanvasRenderingContext2D,
@@ -10,8 +10,8 @@ export const DrawPage = (
   const _y = zoomedY(y, screen.zoom);
   const _width = zoomed(width, screen.zoom);
   const _height = zoomed(height, screen.zoom);
-  const { lineWidth, initScale, colorBorderHoverGroup, getControl } = config;
-  const { setHover, removeHover, selection } = getControl();
+  const { getControl } = config;
+  const { setHover, removeHover } = getControl();
   const isHoverScreen = cursor.inScreen();
   const isHoverTitle = cursor.inTitle();
   const isHover = isHoverScreen || isHoverTitle;
@@ -20,23 +20,10 @@ export const DrawPage = (
     setHover(id);
   } else removeHover(id);
 
-  if (selection[0] === id && isHover) {
-    const mode = checkModeResize(screen);
-    console.log("mode", mode);
-  }
-
-  /*------- Frame page -------*/
   ctx.save();
   ctx.beginPath();
   ctx.fillStyle = backgroundColor || "#ffffff";
   ctx.fillRect(_x, _y, _width, _height);
-  if (isHover) {
-    const lineW = lineWidth * initScale;
-    const half = lineW / 2;
-    ctx.lineWidth = isHover ? lineWidth : 0;
-    ctx.strokeStyle = colorBorderHoverGroup;
-    ctx.strokeRect(_x - half, _y - half, _width + lineW, _height + lineW);
-  }
   ctx.closePath();
   ctx.restore();
   // ctx.globalCompositeOperation='source-over';  Default Displays the source over the destination

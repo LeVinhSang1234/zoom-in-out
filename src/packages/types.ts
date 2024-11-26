@@ -52,9 +52,15 @@ export type TitleReq = { id: string; config: TitleConfig };
 
 export type ComponentProps = {} & WindowSize & Pointer;
 
+export type ComponentCursor = {
+  inScreen: () => boolean;
+  inTitle: () => boolean;
+  setModeResize: (mode?: ModeResize) => void;
+};
+
 export type ComponentApp = {
   zoom: Zoom;
-  cursor: { inScreen: () => boolean; inTitle: () => boolean };
+  cursor: ComponentCursor;
   children?: ComponentApp[];
   type: ComponentAppType;
   titleConfig: TitleConfig;

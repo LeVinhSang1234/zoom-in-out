@@ -3,17 +3,20 @@ import {
   ComponentApp,
   ComponentBase,
   KEYBOARD_CODE,
+  ModeResize,
   WindowSize,
   Zoom,
 } from "../../types";
 import { DrawPage } from "../../helpers/DrawPage";
 import {
+  addClass,
   getConfig,
   getMaxHeightSize,
   getMaxWidthSize,
   getSize,
   makeComponent,
   makeTitle,
+  removeClass,
   zoomedX_INV,
   zoomedY_INV,
 } from "../../utlis";
@@ -32,6 +35,7 @@ import FPS from "../../lib/FPS";
 import { withControlProvider } from "../../context/withControlProvider";
 import "./index.css";
 import { DrawInputTitle } from "../../helpers/DrawInputTitle";
+import { DrawBoxResize } from "../../helpers/DrawBoxResize";
 
 type Props = {
   layout: WindowSize;
@@ -170,13 +174,19 @@ class Canvas extends Component<CanvasProps> {
         this.draw();
       };
       makeComponent(this.ctx!, component);
+      component.cursor.setModeResize = this.setModeResize;
       DrawPage(this.ctx!, component);
     }
     DrawFramePixel(this.ctx, { layout, zoom: this.zoom, config });
     for (const component of components) {
       DrawName(this.ctx!, component);
       DrawInputTitle(this.ctx!, component);
+      DrawBoxResize(this.ctx!, component);
     }
+  };
+
+  private setModeResize = (mode?: ModeResize) => {
+    this.canvasMode(mode);
   };
 
   private setSizeCanvas = (windowSize: WindowSize, radio: number) => {
@@ -210,11 +220,9 @@ class Canvas extends Component<CanvasProps> {
     const { getControl } = this.props;
     const control = getControl();
     const { titleEdited, titleHover, setSelection } = control;
-
-    if (titleHover?.id) {
-      setSelection([titleHover.id]);
-    } else setSelection([]);
-
+    if (!this.app.pressSpace) {
+      setSelection(titleHover?.id ? [titleHover.id] : []);
+    }
     if (titleEdited && titleHover?.id !== titleEdited?.id) {
       control.removeTitleEdited(titleEdited.id);
     }
@@ -235,11 +243,28 @@ class Canvas extends Component<CanvasProps> {
   };
 
   private canvasGrab = () => {
-    if (this.canvas) this.canvas.className = "canvas canvas--grab";
+    addClass(this.canvas, "canvas--grab");
   };
 
   private canvasGrabbing = () => {
-    if (this.canvas) this.canvas.className = "canvas canvas--grabbing";
+    addClass(this.canvas, "canvas--grabbing");
+  };
+
+  private canvasMode = (mode?: ModeResize) => {
+    if (!mode) {
+      removeClass(this.canvas, "canvas--resize-tl_br");
+      removeClass(this.canvas, "canvas--resize-tr_bl");
+      removeClass(this.canvas, "canvas--resize-horizontal");
+      removeClass(this.canvas, "canvas--resize-vertical");
+    } else {
+      if ([ModeResize.TOP_LEFT, ModeResize.BOTTOM_RIGHT].includes(mode)) {
+        addClass(this.canvas, "canvas--resize-tl_br");
+      } else if ([ModeResize.LEFT, ModeResize.RIGHT].includes(mode)) {
+        addClass(this.canvas, "canvas--resize-horizontal");
+      } else if ([ModeResize.TOP, ModeResize.BOTTOM].includes(mode)) {
+        addClass(this.canvas, "canvas--resize-vertical");
+      }
+    }
   };
 
   private canvasCursor = () => {
@@ -255,7 +280,7 @@ class Canvas extends Component<CanvasProps> {
           {...size}
           ref={(ref) => (this.canvas = ref)}
           style={style}
-          className="canvas"
+          className="canvas --no-edit"
         />
         <ElementListener
           options={{ passive: false }}

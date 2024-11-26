@@ -7,14 +7,17 @@ export const DrawName = (
   const { config, cursor, id, titleConfig } = component;
   const { titlePageColor, titlePageHoverColor, getControl } = config;
   let text = titleConfig.text;
-  const { setTitleHover, removeTitleHover, titleEdited } = getControl();
+  const { setTitleHover, removeTitleHover, titleEdited, selection } =
+    getControl();
 
   ctx.save();
   ctx.beginPath();
   ctx.font = `400 ${titleConfig.fontSize}px Inter, sans-serif`;
+  const isSelection = selection[0] === id;
+
   const isHoverScreen = cursor.inScreen();
   const isHoverTitle = cursor.inTitle();
-  const isHover = isHoverScreen || isHoverTitle;
+  const isHover = isHoverScreen || isHoverTitle || isSelection;
 
   if (isHoverTitle) {
     setTitleHover({ id, config: titleConfig });
