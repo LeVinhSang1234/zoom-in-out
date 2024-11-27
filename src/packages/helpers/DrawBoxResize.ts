@@ -18,7 +18,8 @@ export const DrawBoxResize = (
 
   if (isSelection && !isPressSpace) {
     const mode = checkModeResize(screen);
-    if (!cursor.downing || !cursor.mode || mode) {
+    const app = cursor.getApp();
+    if (!app.cursorDowning || !app.modeResize || mode) {
       cursor.triggerModeResize(mode);
     }
   }

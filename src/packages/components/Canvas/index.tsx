@@ -11,12 +11,12 @@ import { DrawFramePixel } from "../../helpers/DrawFramePixel";
 import { BACKGROUND_COLOR, MAX_ZOOM, MIN_ZOOM, RATIO } from "../../conts";
 import { DrawName } from "../../helpers/DrawName";
 import {
+  AppControl,
   CanvasContextValue,
   ComponentApp,
   ComponentBase,
   KEYBOARD_CODE,
   ModeResize,
-  Pointer,
   TCanvasControlContext,
   WindowSize,
   Zoom,
@@ -45,18 +45,11 @@ class CanvasBase extends Component<Props> {}
 
 type CanvasProps = Props & CanvasContextValue & TCanvasControlContext;
 
-type Mouse = { screenX: number; screenY: number; pageX: number; pageY: number };
-
 class Canvas extends Component<CanvasProps> {
   private canvas: HTMLCanvasElement | null;
   private ctx: CanvasRenderingContext2D | null;
   private zoom: Zoom;
-  private app: {
-    isPressSpace: boolean; // Check đang giữ phim space sẽ hiển thị bàn tay đợi drag screen
-    modeResize?: ModeResize;
-    cursorDowning?: Pointer & Mouse; // Check mouse down sẽ cho phép drag screen
-    cursor?: Pointer & Mouse;
-  };
+  private app: AppControl;
 
   constructor(props: CanvasProps & CanvasContextValue) {
     super(props);
@@ -185,10 +178,10 @@ class Canvas extends Component<CanvasProps> {
         this.draw();
       };
       configCursor(component);
-      component.cursor.triggerModeResize = this.triggerModeResize;
-      component.cursor.mode = this.app.modeResize;
-      component.cursor.downing = !!this.app.cursorDowning;
-
+      component.cursor.triggerModeResize = (mode?: ModeResize) => {
+        this.triggerModeResize(component, mode);
+      };
+      component.cursor.getApp = () => this.app;
       DrawPage(this.ctx!, component);
     }
     DrawFramePixel(this.ctx, { layout, zoom: this.zoom, config });
@@ -199,8 +192,12 @@ class Canvas extends Component<CanvasProps> {
     }
   };
 
-  private triggerModeResize = (mode?: ModeResize) => {
+  private triggerModeResize = (component: ComponentApp, mode?: ModeResize) => {
     this.app.modeResize = mode;
+    if (mode && this.app.cursorDowning) {
+      const { x, y, width, height } = component;
+      this.app.sizeBegin = { x, y, width, height };
+    } else this.app.sizeBegin = undefined;
     this.canvasMode(mode);
   };
 
@@ -239,18 +236,21 @@ class Canvas extends Component<CanvasProps> {
     const control = getControl();
     const { titleEdited, titleHover, setSelection } = control;
     if (!isPressSpace && !modeResize) {
-      setSelection(titleHover?.id ? [titleHover.id] : []);
+      if (titleHover?.id) setSelection([titleHover.id]);
+      else setSelection([]);
     }
-    if (titleEdited && !titleHover) {
+    if (titleEdited && titleEdited?.id !== titleHover?.id) {
       control.removeTitleEdited(titleEdited.id);
     }
     this.draw();
   };
 
-  private onDoubleClick = () => {
-    const { titleHover, setTitleEdited } = this.props.getControl();
-    if (titleHover) setTitleEdited(titleHover.id);
-    this.draw();
+  private onDoubleClick = (event: MouseEvent) => {
+    const { titleHover, setTitleEdited, selection } = this.props.getControl();
+    if (titleHover && selection.includes(titleHover?.id)) {
+      setTitleEdited(titleHover.id);
+      this.draw();
+    } else this.onMouseDown(event);
   };
 
   private onMouseUp = () => {
