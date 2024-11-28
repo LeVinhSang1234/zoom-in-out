@@ -4,7 +4,7 @@ import { PropsWithChildren, useCallback, useRef } from "react";
 
 export const CanvasControlProvider = ({ children }: PropsWithChildren) => {
   const selection = useRef<string[]>([]);
-  const hover = useRef<string[]>([]);
+  const hover = useRef<string>();
   const title = useRef<TitleReq>();
   const titleEdited = useRef<{ id: string; input?: HTMLInputElement }>();
 
@@ -34,12 +34,11 @@ export const CanvasControlProvider = ({ children }: PropsWithChildren) => {
   }, []);
 
   const setHover = useCallback((id: string) => {
-    if (hover.current.includes(id)) return;
-    hover.current.push(id);
+    hover.current = id;
   }, []);
 
   const removeHover = useCallback((id: string) => {
-    hover.current = hover.current.filter((e) => e !== id);
+    if (hover.current === id) hover.current = undefined;
   }, []);
 
   const getControl = useCallback((): TCanvasControl => {

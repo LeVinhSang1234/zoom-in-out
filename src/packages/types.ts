@@ -112,7 +112,7 @@ export type TitleReq = { id: string; config: TitleConfig };
 export type TCanvasControl = {
   selection: string[];
   titleHover?: TitleReq;
-  hover?: string[];
+  hover?: string;
   titleEdited?: { id: string; input?: HTMLInputElement };
   setSelection: (selection: string[]) => void;
   setTitleHover: (req: TitleReq) => void;

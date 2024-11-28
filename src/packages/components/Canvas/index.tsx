@@ -35,6 +35,7 @@ import {
 } from "../../utlis";
 
 import "./index.css";
+import { AppendResize } from "../../helpers/AppendResize";
 
 type Props = {
   layout: WindowSize;
@@ -178,10 +179,11 @@ class Canvas extends Component<CanvasProps> {
         this.draw();
       };
       configCursor(component);
+      component.cursor.getApp = () => this.app;
+      AppendResize(component);
       component.cursor.triggerModeResize = (mode?: ModeResize) => {
         this.triggerModeResize(component, mode);
       };
-      component.cursor.getApp = () => this.app;
       DrawPage(this.ctx!, component);
     }
     DrawFramePixel(this.ctx, { layout, zoom: this.zoom, config });
@@ -194,7 +196,7 @@ class Canvas extends Component<CanvasProps> {
 
   private triggerModeResize = (component: ComponentApp, mode?: ModeResize) => {
     this.app.modeResize = mode;
-    if (mode && this.app.cursorDowning) {
+    if (mode) {
       const { x, y, width, height } = component;
       this.app.sizeBegin = { x, y, width, height };
     } else this.app.sizeBegin = undefined;
@@ -303,7 +305,6 @@ class Canvas extends Component<CanvasProps> {
           onWheel={this.onWheel}
           onMouseDown={this.onMouseDown}
           onDoubleClick={this.onDoubleClick}
-          onMouseMove={this.onMouseMove}
           onMouseOut={this.onMouseEvent}
         />
         <EventListener
@@ -311,6 +312,7 @@ class Canvas extends Component<CanvasProps> {
           onMouseUp={this.onMouseUp}
           onKeyDown={this.onKeyDown}
           onKeyUp={this.onKeyUp}
+          onMouseMove={this.onMouseMove}
         />
         <DisabledBrowser />
         <FPS />

@@ -52,7 +52,7 @@ export const initControl: TCanvasControl = {
   selection: [],
   titleHover: undefined,
   titleEdited: undefined,
-  hover: [],
+  hover: undefined,
   setHover: () => undefined,
   removeHover: () => undefined,
   setSelection: () => undefined,

@@ -17,7 +17,8 @@ export const DrawName = (
 
   const isHoverScreen = cursor.inScreen();
   const isHoverTitle = cursor.inTitle();
-  const isHover = isHoverScreen || isHoverTitle || isSelection;
+  const modeResize = cursor.getApp().modeResize
+  const isHover = ((isHoverScreen || isHoverTitle) && !modeResize) || isSelection;
 
   if (isHoverTitle) {
     setTitleHover({ id, config: titleConfig });

@@ -6,22 +6,19 @@ export const DrawBoxResize = (
   ctx: CanvasRenderingContext2D,
   screen: ComponentApp
 ) => {
-  const { zoom, config, x, y, width, height, cursor, id } = screen;
+  const { zoom, config, cursor, id, x, y, width, height } = screen;
   const { lineWidth, initScale, isPressSpace } = config;
-  const { selection } = config.getControl();
-
-  const isHoverScreen = cursor.inScreen();
-  const isHoverTitle = cursor.inTitle();
-  const isHover = isHoverScreen || isHoverTitle;
+  const { selection, hover } = config.getControl();
+  const { modeResize } = cursor.getApp();
   const isSelection = selection[0] === id;
+  const isHover = (hover === id && !modeResize) || (modeResize && isSelection);
+
   if (!isHover && !isSelection) return;
 
   if (isSelection && !isPressSpace) {
     const mode = checkModeResize(screen);
     const app = cursor.getApp();
-    if (!app.cursorDowning || !app.modeResize || mode) {
-      cursor.triggerModeResize(mode);
-    }
+    if (!app.cursorDowning) cursor.triggerModeResize(mode);
   }
 
   ctx.save();
