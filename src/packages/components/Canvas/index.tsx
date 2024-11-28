@@ -173,17 +173,25 @@ class Canvas extends Component<CanvasProps> {
     for (const component of components) {
       component.zoom = this.zoom;
       component.config = config;
+
+      // ---- Cursor -----//
+      configCursor(component);
+      component.cursor.getApp = () => this.app;
+      component.cursor.triggerModeResize = (mode?: ModeResize) => {
+        this.triggerModeResize(component, mode);
+      };
+      // ---- Cursor -----//
+
+      AppendResize(component);
+
+      // ------- Title --------- //
       makeTitle(this.ctx!, component);
       component.titleConfig.onChange = (title: string) => {
         component.title = title;
         this.draw();
       };
-      configCursor(component);
-      component.cursor.getApp = () => this.app;
-      AppendResize(component);
-      component.cursor.triggerModeResize = (mode?: ModeResize) => {
-        this.triggerModeResize(component, mode);
-      };
+      // ------- Title --------- //
+
       DrawPage(this.ctx!, component);
     }
     DrawFramePixel(this.ctx, { layout, zoom: this.zoom, config });
@@ -233,17 +241,20 @@ class Canvas extends Component<CanvasProps> {
     const { x, y, screenX, screenY, pageX, pageY } = event;
     this.app.cursorDowning = { x, y, screenX, screenY, pageX, pageY };
     const { isPressSpace, modeResize } = this.app;
-    if (isPressSpace) this.canvasGrabbing();
+    if (isPressSpace) return this.canvasGrabbing();
+
     const { getControl } = this.props;
     const control = getControl();
     const { titleEdited, titleHover, setSelection } = control;
-    if (!isPressSpace && !modeResize) {
-      if (titleHover?.id) setSelection([titleHover.id]);
-      else setSelection([]);
-    }
-    if (titleEdited && titleEdited?.id !== titleHover?.id) {
-      control.removeTitleEdited(titleEdited.id);
-    }
+    if (titleEdited) control.removeTitleEdited(titleEdited.id);
+
+    if (modeResize) return;
+
+    if (titleHover?.id) {
+      setSelection([titleHover.id]);
+      this.app.modeResize = ModeResize.DRAG_DROP;
+    } else setSelection([]);
+
     this.draw();
   };
 
@@ -257,10 +268,9 @@ class Canvas extends Component<CanvasProps> {
 
   private onMouseUp = () => {
     this.app.cursorDowning = undefined;
-    if (this.app.isPressSpace) {
-      this.canvasGrab();
-    } else if (!this.app.modeResize) this.canvasCursor();
-    this.draw();
+    this.app.sizeBegin = undefined;
+    if (this.app.isPressSpace) this.canvasGrab();
+    else if (!this.app.modeResize) this.canvasCursor();
   };
 
   private canvasGrab = () => {
@@ -272,7 +282,8 @@ class Canvas extends Component<CanvasProps> {
   };
 
   private canvasMode = (mode?: ModeResize) => {
-    if (!mode) return changeClass(this.canvas, "canvas --no-edit");
+    if (!mode || mode === ModeResize.DRAG_DROP)
+      return changeClass(this.canvas, "canvas --no-edit");
     if ([ModeResize.TOP_RIGHT, ModeResize.BOTTOM_LEFT].includes(mode)) {
       changeClass(this.canvas, "canvas --no-edit canvas--resize-tr_bl");
     } else if ([ModeResize.TOP_LEFT, ModeResize.BOTTOM_RIGHT].includes(mode)) {

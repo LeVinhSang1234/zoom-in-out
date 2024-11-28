@@ -48,9 +48,14 @@ export type TitleConfig = {
 
 export type ComponentProps = {} & WindowSize & Pointer;
 
-export type Mouse = { screenX: number; screenY: number; pageX: number; pageY: number };
+export type Mouse = {
+  screenX: number;
+  screenY: number;
+  pageX: number;
+  pageY: number;
+};
 
-export type AppControl ={
+export type AppControl = {
   isPressSpace: boolean; // Check đang giữ phim space sẽ hiển thị bàn tay đợi drag screen
   modeResize?: ModeResize;
   cursorDowning?: Pointer & Mouse; // Check mouse down sẽ cho phép drag screen
@@ -62,7 +67,7 @@ export type ComponentCursor = {
   inScreen: () => boolean;
   inTitle: () => boolean;
   triggerModeResize: (mode?: ModeResize) => void;
-  getApp: () => AppControl
+  getApp: () => AppControl;
 };
 
 export type ComponentApp = {
@@ -157,4 +162,5 @@ export enum ModeResize {
   BOTTOM_RIGHT = "bottomRight",
   TOP = "top",
   BOTTOM = "bottom",
+  DRAG_DROP = "drag_drop",
 }

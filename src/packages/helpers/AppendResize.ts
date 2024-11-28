@@ -48,6 +48,10 @@ export const AppendResize = (screen: ComponentApp) => {
         screen.width = width + changeX;
         screen.height = height + changeY;
         break;
+      case ModeResize.DRAG_DROP:
+        screen.x = x + changeX;
+        screen.y = y + changeY;
+        break;
     }
   }
 };

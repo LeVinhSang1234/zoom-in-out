@@ -1,4 +1,4 @@
-import { ComponentApp } from "../types";
+import { ComponentApp, ModeResize } from "../types";
 import { checkModeResize, zoomed, zoomedX, zoomedY } from "../utlis";
 import { DrawSquareResize } from "./DrawSquareResize";
 
@@ -9,7 +9,7 @@ export const DrawBoxResize = (
   const { zoom, config, cursor, id, x, y, width, height } = screen;
   const { lineWidth, initScale, isPressSpace } = config;
   const { selection, hover } = config.getControl();
-  const { modeResize } = cursor.getApp();
+  const { modeResize, cursorDowning, sizeBegin } = cursor.getApp();
   const isSelection = selection[0] === id;
   const isHover = (hover === id && !modeResize) || (modeResize && isSelection);
 
@@ -17,8 +17,10 @@ export const DrawBoxResize = (
 
   if (isSelection && !isPressSpace) {
     const mode = checkModeResize(screen);
-    const app = cursor.getApp();
-    if (!app.cursorDowning) cursor.triggerModeResize(mode);
+    if (!cursorDowning && mode !== modeResize) cursor.triggerModeResize(mode);
+    if (!sizeBegin && !mode && modeResize === ModeResize.DRAG_DROP) {
+      cursor.triggerModeResize(ModeResize.DRAG_DROP);
+    }
   }
 
   ctx.save();
