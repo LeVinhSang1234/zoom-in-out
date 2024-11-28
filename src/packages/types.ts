@@ -79,6 +79,11 @@ export type ComponentApp = {
 } & ComponentProps &
   ComponentBase & { config: CanvasContextValue };
 
+export type TGuideLine = Partial<Pointer> & {
+  modeX?: ModeResize;
+  modeY?: ModeResize;
+};
+
 export type Zoom = {
   scale: number;
   worldOrigin: Pointer; // translate x và translate y. sẽ bằng rx
@@ -110,6 +115,8 @@ export type CanvasContextValue = {
   isPressSpace?: boolean;
   ratio?: number;
   sizeBoxResize?: number;
+  colorGuideLine?: string;
+  guideLineDistance?: number;
 } & TCanvasControlContext;
 
 export type TitleReq = { id: string; config: TitleConfig };

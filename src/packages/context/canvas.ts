@@ -16,6 +16,8 @@ import {
   TITLE_PAGE_HOVER_COLOR,
   RATIO,
   SIZE_BOX_RESIZE,
+  COLOR_GUIDE_LINE,
+  GUIDE_LINE_DISTANCE,
 } from "../conts";
 import {
   CanvasContextValue,
@@ -40,6 +42,8 @@ export const defaultValueContext: CanvasContextValue & TCanvasControlContext = {
   titlePageHoverColor: TITLE_PAGE_HOVER_COLOR,
   ratio: RATIO,
   sizeBoxResize: SIZE_BOX_RESIZE,
+  colorGuideLine: COLOR_GUIDE_LINE,
+  guideLineDistance: GUIDE_LINE_DISTANCE,
   getControl: () => initControl,
 };
 

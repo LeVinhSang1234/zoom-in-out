@@ -18,6 +18,7 @@ import {
   KEYBOARD_CODE,
   ModeResize,
   TCanvasControlContext,
+  TGuideLine,
   WindowSize,
   Zoom,
 } from "../../types";
@@ -36,6 +37,8 @@ import {
 
 import "./index.css";
 import { AppendResize } from "../../helpers/AppendResize";
+import { GetGuideLine } from "../../helpers/GetGuideLine";
+import { DrawGuideLine } from "../../helpers/DrawGuideLine";
 
 type Props = {
   layout: WindowSize;
@@ -170,6 +173,7 @@ class Canvas extends Component<CanvasProps> {
     const { layout } = props;
     const components = props.components as ComponentApp[];
     const config = getConfig({ ...props, isPressSpace: this.app.isPressSpace });
+    const guideLine: TGuideLine[] = [];
     for (const component of components) {
       component.zoom = this.zoom;
       component.config = config;
@@ -183,6 +187,7 @@ class Canvas extends Component<CanvasProps> {
       // ---- Cursor -----//
 
       AppendResize(component);
+      GetGuideLine(components, component, guideLine);
 
       // ------- Title --------- //
       makeTitle(this.ctx!, component);
@@ -199,6 +204,9 @@ class Canvas extends Component<CanvasProps> {
       DrawName(this.ctx!, component);
       DrawInputTitle(this.ctx!, component);
       DrawBoxResize(this.ctx!, component);
+    }
+    for (const line of guideLine) {
+      DrawGuideLine(this.ctx, { ...config, layout, zoom: this.zoom }, line);
     }
   };
 
@@ -223,6 +231,8 @@ class Canvas extends Component<CanvasProps> {
   private onKeyDown = (event: KeyboardEvent) => {
     if (event.code === KEYBOARD_CODE.SPACE && !this.app.isPressSpace) {
       this.app.isPressSpace = true;
+      this.app.sizeBegin = undefined;
+      this.app.modeResize = undefined;
       if (!this.app.cursorDowning) this.canvasGrab();
       else this.canvasGrabbing();
       this.draw();
@@ -271,6 +281,7 @@ class Canvas extends Component<CanvasProps> {
     this.app.sizeBegin = undefined;
     if (this.app.isPressSpace) this.canvasGrab();
     else if (!this.app.modeResize) this.canvasCursor();
+    this.draw();
   };
 
   private canvasGrab = () => {
