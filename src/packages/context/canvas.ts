@@ -18,6 +18,7 @@ import {
   SIZE_BOX_RESIZE,
   COLOR_GUIDE_LINE,
   GUIDE_LINE_DISTANCE,
+  COLOR_TEXT,
 } from "../conts";
 import {
   CanvasContextValue,
@@ -44,6 +45,8 @@ export const defaultValueContext: CanvasContextValue & TCanvasControlContext = {
   sizeBoxResize: SIZE_BOX_RESIZE,
   colorGuideLine: COLOR_GUIDE_LINE,
   guideLineDistance: GUIDE_LINE_DISTANCE,
+  textColor: COLOR_TEXT,
+  isPressSpace: false,
   getControl: () => initControl,
 };
 

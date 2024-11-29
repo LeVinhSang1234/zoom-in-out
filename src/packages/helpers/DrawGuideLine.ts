@@ -1,4 +1,4 @@
-import { COLOR_GUIDE_LINE, RATIO } from "../conts";
+import { COLOR_GUIDE_LINE } from "../conts";
 import { CanvasContextValue, TGuideLine, WindowSize, Zoom } from "../types";
 import { getSize, zoomedX, zoomedY } from "../utlis";
 
@@ -10,7 +10,7 @@ export const DrawGuideLine = (
   if (!guideLine) return;
   const { x, y } = guideLine;
   if (x !== undefined || y !== undefined) {
-    const { ratio = RATIO, layout, zoom } = config;
+    const { ratio, layout, zoom } = config;
     const { width, height } = getSize(layout, ratio);
     ctx.save();
     ctx.strokeStyle = config.colorGuideLine || COLOR_GUIDE_LINE;

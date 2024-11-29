@@ -1,12 +1,30 @@
-import { base64Point, RATIO, SIZE_BOX_RESIZE } from "./conts";
+import {
+  BACKGROUND_COLOR,
+  BACKGROUND_COLOR_MENU,
+  COLOR_BORDER_HOVER_ELEMENT,
+  COLOR_BORDER_HOVER_GROUP,
+  FONT_SIZE,
+  FRAME_PIXEL_COLOR,
+  GUIDE_LINE_DISTANCE,
+  INIT_SCALE,
+  LINE_WIDTH,
+  MAX_ZOOM,
+  MIN_ZOOM,
+  RATIO,
+  SCALE_VISIBLE_FRAME,
+  SIZE_BOX_RESIZE,
+  SIZE_LINE_FRAME,
+  TITLE_PAGE_COLOR,
+  TITLE_PAGE_HOVER_COLOR,
+} from "./conts";
 import {
   CanvasContextValue,
   ComponentApp,
   ComponentCursor,
-  CursorType,
   KEYBOARD_CODE,
   ModeResize,
   Pointer,
+  TConfig,
   TitleConfig,
   WindowSize,
   Zoom,
@@ -115,13 +133,6 @@ export const EnableEventBrowser = () => {
   document.removeEventListener("keydown", onKeydown);
 };
 
-export const getCursor = (type: CursorType) => {
-  if (type === CursorType.DEFAULT) {
-    return `url("${base64Point}") 4 4, auto !important`;
-  }
-  return type;
-};
-
 export const getSize = (size: WindowSize, ratio: number) => {
   return {
     width: size.width * ratio,
@@ -144,40 +155,42 @@ export const getMaxHeightSize = (
 };
 
 export const getConfig = (
-  props: CanvasContextValue & { layout: WindowSize }
-): CanvasContextValue & { layout: WindowSize } => {
+  props: Partial<CanvasContextValue> & { layout: WindowSize }
+): TConfig => {
   const {
-    lineWidth,
-    fontSize,
-    minZoom,
-    maxZoom,
-    sizeLineFrame,
-    colorBorderHoverElement,
-    colorBorderHoverGroup,
-    backgroundColor,
-    framePixelColor,
-    scaleVisibleFrame,
-    initScale,
-    backgroundColorMenu,
-    titlePageColor,
-    titlePageHoverColor,
+    lineWidth = LINE_WIDTH,
+    fontSize = FONT_SIZE,
+    minZoom = MIN_ZOOM,
+    maxZoom = MAX_ZOOM,
+    sizeLineFrame = SIZE_LINE_FRAME,
+    colorBorderHoverElement = COLOR_BORDER_HOVER_ELEMENT,
+    colorBorderHoverGroup = COLOR_BORDER_HOVER_GROUP,
+    backgroundColor = BACKGROUND_COLOR,
+    framePixelColor = FRAME_PIXEL_COLOR,
+    scaleVisibleFrame = SCALE_VISIBLE_FRAME,
+    initScale = INIT_SCALE,
+    backgroundColorMenu = BACKGROUND_COLOR_MENU,
+    titlePageColor = TITLE_PAGE_COLOR,
+    titlePageHoverColor = TITLE_PAGE_HOVER_COLOR,
     isPressSpace,
     layout,
     getControl,
-    ratio,
+    ratio = RATIO,
+    sizeBoxResize = SIZE_BOX_RESIZE,
+    guideLineDistance = GUIDE_LINE_DISTANCE,
   } = props;
 
   return {
-    lineWidth,
+    lineWidth: lineWidth * ratio,
     fontSize,
-    minZoom,
-    maxZoom,
-    sizeLineFrame,
+    minZoom: minZoom * ratio,
+    maxZoom: maxZoom * ratio,
+    sizeLineFrame: sizeLineFrame * ratio,
     colorBorderHoverElement,
     colorBorderHoverGroup,
     backgroundColor,
     framePixelColor,
-    scaleVisibleFrame,
+    scaleVisibleFrame: scaleVisibleFrame * ratio,
     initScale,
     backgroundColorMenu,
     titlePageColor,
@@ -186,7 +199,9 @@ export const getConfig = (
     isPressSpace,
     layout,
     ratio,
-  };
+    sizeBoxResize: sizeBoxResize * RATIO,
+    guideLineDistance: guideLineDistance * RATIO,
+  } as TConfig;
 };
 
 export const clsx = (...args: any[]) => {
@@ -207,7 +222,7 @@ export const makeTitle = (
   const _y = zoomedY(y, zoom);
   const _width = zoomed(width, zoom);
 
-  const { fontSize, ratio = RATIO } = config;
+  const { fontSize, ratio } = config;
   let text = title || "";
   ctx.save();
   ctx.font = `400 ${fontSize * ratio}px Inter, sans-serif`;
@@ -223,7 +238,7 @@ export const makeTitle = (
     }
     text = truncatedText + ellipsis;
   }
-  const height = fontSize * ratio;
+  const height = fontSize * 1.2 * RATIO;
   const yText = _y - SUB * ratio;
   textWidth = ctx.measureText(text).width;
   if (textWidth > _width) {

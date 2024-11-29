@@ -10,7 +10,17 @@ const screens: ComponentBase[] = [
     height: 667,
     x: 0,
     y: 0,
-    children: [],
+    children: [
+      {
+        id: "7df2236d89c3",
+        width: 200,
+        height: 30,
+        text: "Text",
+        x: 0,
+        y: 0,
+        type: ComponentAppType.TEXT,
+      },
+    ],
     type: ComponentAppType.SCREEN,
   },
   {
@@ -53,7 +63,7 @@ const Editor: React.FC = () => {
 
   if (!width || !height) return null;
 
-  return <Canvas components={components.current} layout={{ width, height }} />;
+  return <Canvas screens={components.current} layout={{ width, height }} />;
 };
 
 export default Editor;

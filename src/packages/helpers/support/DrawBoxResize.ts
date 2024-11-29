@@ -1,5 +1,5 @@
-import { ComponentApp, ModeResize } from "../types";
-import { checkModeResize, zoomed, zoomedX, zoomedY } from "../utlis";
+import { ComponentApp, ModeResize } from "../../types";
+import { checkModeResize, zoomed, zoomedX, zoomedY } from "../../utlis";
 import { DrawSquareResize } from "./DrawSquareResize";
 
 export const DrawBoxResize = (
@@ -7,7 +7,7 @@ export const DrawBoxResize = (
   screen: ComponentApp
 ) => {
   const { zoom, config, cursor, id, x, y, width, height } = screen;
-  const { lineWidth, initScale, isPressSpace } = config;
+  const { lineWidth, isPressSpace } = config;
   const { selection, hover } = config.getControl();
   const { modeResize, cursorDowning, sizeBegin } = cursor.getApp();
   const isSelection = selection[0] === id;
@@ -24,17 +24,15 @@ export const DrawBoxResize = (
   }
 
   ctx.save();
-  ctx.beginPath();
   const _x = zoomedX(x, zoom);
   const _y = zoomedY(y, zoom);
   const _width = zoomed(width, zoom);
   const _height = zoomed(height, zoom);
   ctx.strokeStyle = config.colorBorderHoverGroup;
-  const lineW = lineWidth * (!isHover ? initScale : 1);
+  const lineW = lineWidth + (isHover ? 1 : 0);
   const half = lineW / 2;
   ctx.lineWidth = lineW;
   ctx.strokeRect(_x - half, _y - half, _width + lineW, _height + lineW);
-  ctx.closePath();
   ctx.restore();
 
   if (isSelection) {

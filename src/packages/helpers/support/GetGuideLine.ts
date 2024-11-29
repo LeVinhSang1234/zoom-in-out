@@ -1,5 +1,4 @@
-import { GUIDE_LINE_DISTANCE } from "../conts";
-import { ComponentApp, ModeResize, TGuideLine } from "../types";
+import { ComponentApp, ModeResize, TGuideLine } from "../../types";
 
 export const GetGuideLine = (
   components: ComponentApp[],
@@ -9,8 +8,7 @@ export const GetGuideLine = (
   const app = screen.cursor.getApp();
   const { selection } = screen.config.getControl();
   const isSelection = selection[0] === screen.id;
-  const { isPressSpace, guideLineDistance = GUIDE_LINE_DISTANCE } =
-    screen.config;
+  const { isPressSpace, guideLineDistance } = screen.config;
 
   const space = Math.max(guideLineDistance / screen.zoom.scale, 4);
 
@@ -48,7 +46,6 @@ export const GetGuideLine = (
     for (const component of components) {
       if (component.id === screen.id) continue;
       const { x: _x, y: _y, width: _width, height: _height } = component;
-      // TODO check guidline exist x and exist y
       if (x > _x - space && x < _x + space && isLeft) {
         if (!guideLine.length || !guideLine.some((e) => e.x === _x)) {
           guideLine.push({ x: _x, modeX: ModeResize.LEFT });

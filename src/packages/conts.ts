@@ -1,10 +1,10 @@
 export const RATIO = window.devicePixelRatio;
-export const LINE_WIDTH = 2;
+export const LINE_WIDTH = 1;
 export const INIT_SCALE = RATIO / 2;
 export const FONT_SIZE = 11;
-export const MIN_ZOOM = 0.04 * RATIO;
-export const SIZE_LINE_FRAME = 1 * RATIO;
-export const MAX_ZOOM = 400 * RATIO;
+export const MIN_ZOOM = 0.04;
+export const SIZE_LINE_FRAME = 1;
+export const MAX_ZOOM = 400;
 export const COLOR_BORDER_HOVER_ELEMENT = "#8b46e5";
 export const COLOR_BORDER_HOVER_GROUP = "#0d8be6";
 export const BACKGROUND_COLOR = "#343434";
@@ -12,10 +12,9 @@ export const BACKGROUND_COLOR_MENU = "#2c2c2c";
 export const FRAME_PIXEL_COLOR = "#AAAAAA";
 export const TITLE_PAGE_COLOR = "#979797";
 export const TITLE_PAGE_HOVER_COLOR = "#76b6e4";
-export const SCALE_VISIBLE_FRAME = 10 * RATIO;
-export const SIZE_BOX_RESIZE = 6 / RATIO;
+export const SCALE_VISIBLE_FRAME = 10;
+export const SIZE_BOX_RESIZE = 6;
 export const COLOR_GUIDE_LINE = "#FF4747";
 export const GUIDE_LINE_DISTANCE = 6;
-
-export const base64Point =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAtBJREFUWEftVj1oGmEYfq4pNqW0tV6NaC2li2RpUUKGDoKik9ChP4OBCJ3cMoQQu0jVFgui6RUzCHYqEuiSFkrtIPgDDXQoNIEOwm1tCBrj0Vr6m/5ceeUOLlc1MZ5kyQuHHxz4Pu/zPO9zH4MDLuaA++MQgJIBOo8IguBmWfYVgL8Afku/Q1NKCeAIgFFBEKIGg2G+2WymjEbjPQDfJSDiMFAoAYwAOJnP530+n2+JmhWLxWcsyz52OBwFANsA/mgNQs3AaQDnRFF8xzAMotEoIpEINjY2Hlqt1rsAvgH4paUsag+cAnB+dXW1ODs7O1apVNoDp1Kp2tzcnLlerz8wm80xLWVRr+EJAJZarbY8NTV1SQZAIGQ2tJZFDWAUgInjuBt2u33B7Xb/J7nWsqgBHAVwNpvNXp+cnIw6HA5jN9PJsjQajQWTyaSUpS+fqgHQKuoBXBBF8S0ZsVfJbJRKpacejycI4Ku0LZQhe6pOHciIVp7nXwSDwYtKH3T6R5fLhXK53H7VarUSer3+jgRi3wDIiObNzc3lTCZzmaZUFjWkovWk89ra2pbFYqkVCoXFQCDwEsBHAD8A7Cm4OjFARhzjOO6m2ogy5dVqdT2Xyy3pdLrtWCz2BsAnAFsABACfB2WgqxFFUUQ4HL4fj8dfS01Jc4pqeuhMQfWzn8TsxEBHIyYSCWFiYqLi9XoXATRIcqkZRTSlI324KKr3RL0sazeb7zAiae33+9+Pj4/fArAuUU3TDvy17AZghxHJcMlk8nYoFHoOoAbgSz8091qHbgDaiZhOp6/NzMxwKysrT5xO5wKAD5L2RLsm1Q0AGZHN5XJXp6enHzEMcwVAXdKeDNeXzvthgIxIPjjD8/y8zWZLSftNK6bpnaBX1pIMxwEck4KFJqcV07R6AaAbkvzQ1AM7vhPy3a7lyvea6a4EshsATeneDwOHAA4ZGDoD/wA5GRIw+FAHtgAAAABJRU5ErkJggg==";
+export const COLOR_TEXT = "#2F3035";
+export const FONT_FAMILY = "Inter, sans-serif";

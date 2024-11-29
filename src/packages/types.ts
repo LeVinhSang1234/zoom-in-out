@@ -7,6 +7,8 @@ export type Bounds = {
 
 export const enum ComponentAppType {
   SCREEN = "Screen",
+  TEXT = "text",
+  GROUP = "group",
 }
 
 export type WindowSize = {
@@ -16,9 +18,19 @@ export type WindowSize = {
 
 export type CSSPropertiesProps = {
   backgroundColor?: string;
+  fontSize?: number;
+  color?: string;
+  lineHeight?: number;
+  fontFamily?: string;
+  fontWeight?: string;
 };
 
 export type Pointer = { x: number; y: number };
+
+export type TConfig = CanvasContextValue & {
+  layout: WindowSize;
+  onChange: (component: ComponentApp) => void;
+};
 
 export type ComponentBase = {
   x: number;
@@ -27,7 +39,7 @@ export type ComponentBase = {
   height: number;
   title?: string;
   id: string;
-  children: ComponentBase[];
+  children?: ComponentBase[];
   text?: string;
   type: ComponentAppType;
 } & CSSPropertiesProps;
@@ -43,7 +55,6 @@ export type TitleConfig = {
   xCanvas: number;
   yCanvas: number;
   heightCanvas: number;
-  onChange: (title: string) => void;
 };
 
 export type ComponentProps = {} & WindowSize & Pointer;
@@ -77,7 +88,7 @@ export type ComponentApp = {
   type: ComponentAppType;
   titleConfig: TitleConfig;
 } & ComponentProps &
-  ComponentBase & { config: CanvasContextValue };
+  ComponentBase & { config: TConfig };
 
 export type TGuideLine = Partial<Pointer> & {
   modeX?: ModeResize;
@@ -112,11 +123,12 @@ export type CanvasContextValue = {
   titlePageHoverColor: string;
   scaleVisibleFrame: number;
   initScale: number;
-  isPressSpace?: boolean;
-  ratio?: number;
-  sizeBoxResize?: number;
-  colorGuideLine?: string;
-  guideLineDistance?: number;
+  isPressSpace: boolean;
+  ratio: number;
+  sizeBoxResize: number;
+  colorGuideLine: string;
+  guideLineDistance: number;
+  textColor: string;
 } & TCanvasControlContext;
 
 export type TitleReq = { id: string; config: TitleConfig };

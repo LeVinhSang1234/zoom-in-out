@@ -6,7 +6,7 @@ import DisabledBrowser from "../../lib/DisabledBrowser";
 import { withCanvasProvider } from "../../context/withCanvasProvider";
 import { withControlProvider } from "../../context/withControlProvider";
 import { DrawInputTitle } from "../../helpers/DrawInputTitle";
-import { DrawBoxResize } from "../../helpers/DrawBoxResize";
+import { DrawBoxResize } from "../../helpers/support/DrawBoxResize";
 import { DrawFramePixel } from "../../helpers/DrawFramePixel";
 import { BACKGROUND_COLOR, MAX_ZOOM, MIN_ZOOM, RATIO } from "../../conts";
 import { DrawName } from "../../helpers/DrawName";
@@ -18,6 +18,7 @@ import {
   KEYBOARD_CODE,
   ModeResize,
   TCanvasControlContext,
+  TConfig,
   TGuideLine,
   WindowSize,
   Zoom,
@@ -36,13 +37,13 @@ import {
 } from "../../utlis";
 
 import "./index.css";
-import { AppendResize } from "../../helpers/AppendResize";
-import { GetGuideLine } from "../../helpers/GetGuideLine";
+import { AppendResize } from "../../helpers/support/AppendResize";
+import { GetGuideLine } from "../../helpers/support/GetGuideLine";
 import { DrawGuideLine } from "../../helpers/DrawGuideLine";
 
 type Props = {
   layout: WindowSize;
-  components: ComponentBase[];
+  screens: ComponentBase[];
 };
 
 class CanvasBase extends Component<Props> {}
@@ -59,10 +60,10 @@ class Canvas extends Component<CanvasProps> {
     super(props);
     this.ctx = null;
     this.canvas = null;
-    const { layout, initScale = 1, components, ratio = RATIO } = props;
+    const { layout, initScale = 1, screens, ratio } = props;
     const { width, height } = getSize(layout, ratio);
-    const maxWidth = getMaxWidthSize(components, initScale);
-    const maxHeight = getMaxHeightSize(components, initScale);
+    const maxWidth = getMaxWidthSize(screens, initScale);
+    const maxHeight = getMaxHeightSize(screens, initScale);
     const origin = { x: (width - maxWidth) / 2, y: (height - maxHeight) / 2 };
     this.zoom = {
       scale: initScale,
@@ -76,7 +77,7 @@ class Canvas extends Component<CanvasProps> {
   }
 
   shouldComponentUpdate(nProps: CanvasProps): boolean {
-    const { layout, ratio = RATIO } = this.props;
+    const { layout, ratio } = this.props;
     if (layout !== nProps.layout) {
       this.setSizeCanvas(nProps.layout, ratio);
       this.draw();
@@ -87,7 +88,7 @@ class Canvas extends Component<CanvasProps> {
   componentDidMount(): void {
     if (!this.canvas) return;
     this.ctx = this.canvas.getContext("2d");
-    const { layout, ratio = RATIO } = this.props;
+    const { layout, ratio } = this.props;
     this.setSizeCanvas(layout, ratio);
     this.draw();
   }
@@ -95,7 +96,7 @@ class Canvas extends Component<CanvasProps> {
   private calculateMouse = (event: MouseEvent) => {
     if (!this.canvas) return;
     const { mouse } = this.zoom;
-    const { ratio = RATIO } = this.props;
+    const { ratio } = this.props;
     const size = getSize(
       { width: event.clientX, height: event.clientY },
       ratio
@@ -158,6 +159,39 @@ class Canvas extends Component<CanvasProps> {
     this.draw();
   };
 
+  addContextToComponent = (
+    components: ComponentApp[],
+    _component: ComponentApp,
+    config: TConfig,
+    guideLine: TGuideLine[]
+  ) => {
+    _component.zoom = this.zoom;
+    _component.config = config;
+
+    // ---- Cursor -----//
+    configCursor(_component);
+    _component.cursor.getApp = () => this.app;
+    _component.cursor.triggerModeResize = (mode?: ModeResize) => {
+      this.triggerModeResize(_component, mode);
+    };
+    // ---- Cursor -----//
+
+    AppendResize(_component);
+    GetGuideLine(components, _component, guideLine);
+
+    // ------- Title --------- //
+    makeTitle(this.ctx!, _component);
+    if (_component.children?.length) {
+      for (const component of _component.children) {
+        this.addContextToComponent(components, component, config, guideLine);
+      }
+    }
+  };
+
+  onChangeComponent = (_component: ComponentApp, allowDraw: boolean = true) => {
+    if (allowDraw) this.draw();
+  };
+
   draw = (props = this.props) => {
     if (!this.ctx || !this.canvas) return;
     const { width, height } = this.canvas;
@@ -171,31 +205,14 @@ class Canvas extends Component<CanvasProps> {
     this.ctx.restore();
 
     const { layout } = props;
-    const components = props.components as ComponentApp[];
+    const components = props.screens as ComponentApp[];
     const config = getConfig({ ...props, isPressSpace: this.app.isPressSpace });
+    config.onChange = this.onChangeComponent;
     const guideLine: TGuideLine[] = [];
     for (const component of components) {
-      component.zoom = this.zoom;
-      component.config = config;
-
-      // ---- Cursor -----//
-      configCursor(component);
-      component.cursor.getApp = () => this.app;
-      component.cursor.triggerModeResize = (mode?: ModeResize) => {
-        this.triggerModeResize(component, mode);
-      };
-      // ---- Cursor -----//
-
-      AppendResize(component);
-      GetGuideLine(components, component, guideLine);
-
-      // ------- Title --------- //
-      makeTitle(this.ctx!, component);
-      component.titleConfig.onChange = (title: string) => {
-        component.title = title;
-        this.draw();
-      };
-      // ------- Title --------- //
+      // ---- Append Context To Component ---- //
+      this.addContextToComponent(components, component, config, guideLine);
+      // ---- Append Context To Component ---- //
 
       DrawPage(this.ctx!, component);
     }

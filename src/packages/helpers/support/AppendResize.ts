@@ -1,4 +1,5 @@
-import { ComponentApp, ModeResize } from "../types";
+import { RATIO } from "../../conts";
+import { ComponentApp, ModeResize } from "../../types";
 
 export const AppendResize = (screen: ComponentApp) => {
   const app = screen.cursor.getApp();
@@ -11,8 +12,8 @@ export const AppendResize = (screen: ComponentApp) => {
   const { cursorDowning, cursor, modeResize, sizeBegin } = app;
   if (cursorDowning && cursor && sizeBegin && modeResize) {
     const { x, width, y, height } = sizeBegin;
-    const changeX = (cursor.x - cursorDowning.x) / zoom.scale;
-    const changeY = (cursor.y - cursorDowning.y) / zoom.scale;
+    const changeX = ((cursor.x - cursorDowning.x) / zoom.scale) * RATIO;
+    const changeY = ((cursor.y - cursorDowning.y) / zoom.scale) * RATIO;
     switch (modeResize) {
       case ModeResize.LEFT:
         screen.x = x + changeX;

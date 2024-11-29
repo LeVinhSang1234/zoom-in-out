@@ -1,18 +1,12 @@
-import { SIZE_BOX_RESIZE } from "../conts";
-import { ComponentApp } from "../types";
-import { zoomed, zoomedX, zoomedY } from "../utlis";
+import { ComponentApp } from "../../types";
+import { zoomed, zoomedX, zoomedY } from "../../utlis";
 
 export const DrawSquareResize = (
   ctx: CanvasRenderingContext2D,
   screen: ComponentApp
 ) => {
   const { x, y, zoom, width, height, config } = screen;
-  const {
-    sizeBoxResize = SIZE_BOX_RESIZE,
-    colorBorderHoverGroup,
-    lineWidth,
-    initScale,
-  } = config;
+  const { sizeBoxResize, colorBorderHoverGroup, lineWidth, initScale } = config;
   const _x = zoomedX(x, zoom);
   const _y = zoomedY(y, zoom);
   const _width = zoomed(width, zoom);
@@ -23,6 +17,7 @@ export const DrawSquareResize = (
 
   const hafl = sizeBoxResize / 2;
 
+  ctx.save();
   ctx.beginPath();
   ctx.fillStyle = "white";
   ctx.strokeStyle = colorBorderHoverGroup;
@@ -34,4 +29,5 @@ export const DrawSquareResize = (
   ctx.fill();
   ctx.stroke();
   ctx.closePath();
+  ctx.restore();
 };

@@ -1,4 +1,3 @@
-import { RATIO } from "../conts";
 import { ComponentApp } from "../types";
 
 export const DrawInputTitle = (
@@ -6,7 +5,7 @@ export const DrawInputTitle = (
   component: ComponentApp
 ) => {
   const { config, id, titleConfig, width } = component;
-  const { getControl, ratio = RATIO } = config;
+  const { getControl, ratio, onChange } = config;
   const { titleEdited, removeTitleEdited } = getControl();
   if (titleEdited?.id !== id) return;
   let input = titleEdited?.input;
@@ -15,16 +14,19 @@ export const DrawInputTitle = (
     document.body.appendChild(input);
     input.className = "input-edited __no-edit";
     input.oninput = (e: any) => {
-      titleConfig.onChange(e.target.value);
+      component.title = e.target.value;
+      onChange(e.target.value);
     };
     input.onkeydown = (e: any) => {
       if (e.key === "Enter") {
         removeTitleEdited(titleEdited.id);
-        titleConfig.onChange(e.target.value.trim() || "Frame");
+        component.title = e.target.value.trim() || "Frame";
+        onChange(e.target.value);
       }
     };
     input.onblur = (e: any) => {
-      titleConfig.onChange(e.target.value.trim() || "Frame");
+      component.title = e.target.value.trim() || "Frame";
+      onChange(e.target.value);
     };
   }
   input.style.left = `${titleConfig.x / ratio}px`;

@@ -11,7 +11,6 @@ export const DrawName = (
     getControl();
 
   ctx.save();
-  ctx.beginPath();
   ctx.font = `400 ${titleConfig.fontSize}px Inter, sans-serif`;
   const isSelection = selection[0] === id;
 
@@ -31,6 +30,5 @@ export const DrawName = (
     titleConfig.xCanvas,
     titleConfig.yCanvas
   );
-  ctx.closePath();
   ctx.restore();
 };
