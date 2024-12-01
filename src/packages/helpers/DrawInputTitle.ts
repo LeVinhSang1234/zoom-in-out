@@ -1,7 +1,6 @@
 import { ComponentApp } from "../types";
 
 export const DrawInputTitle = (
-  ctx: CanvasRenderingContext2D,
   component: ComponentApp
 ) => {
   const { config, id, titleConfig, width } = component;

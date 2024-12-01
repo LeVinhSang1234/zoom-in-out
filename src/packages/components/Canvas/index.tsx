@@ -23,7 +23,7 @@ import {
   WindowSize,
   Zoom,
 } from "../../types";
-import { DrawPage } from "../../helpers/DrawPage";
+import { DrawFrame } from "../../helpers/DrawFrame";
 import {
   changeClass,
   getConfig,
@@ -214,12 +214,12 @@ class Canvas extends Component<CanvasProps> {
       this.addContextToComponent(components, component, config, guideLine);
       // ---- Append Context To Component ---- //
 
-      DrawPage(this.ctx!, component);
+      DrawFrame(this.ctx!, component);
     }
     DrawFramePixel(this.ctx, { layout, zoom: this.zoom, config });
     for (const component of components) {
       DrawName(this.ctx!, component);
-      DrawInputTitle(this.ctx!, component);
+      DrawInputTitle(component);
       DrawBoxResize(this.ctx!, component);
     }
     for (const line of guideLine) {

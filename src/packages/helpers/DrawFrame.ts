@@ -2,20 +2,18 @@ import { ComponentApp } from "../types";
 import { zoomed, zoomedX, zoomedY } from "../utlis";
 import { DrawChildrenComponent } from "./support/DrawChildren";
 
-export const DrawPage = (
+export const DrawFrame = (
   ctx: CanvasRenderingContext2D,
-  screen: ComponentApp
+  frame: ComponentApp
 ) => {
-  const { x, y, width, height, cursor, backgroundColor, config, id } = screen;
-  const _x = zoomedX(x, screen.zoom);
-  const _y = zoomedY(y, screen.zoom);
-  const _width = zoomed(width, screen.zoom);
-  const _height = zoomed(height, screen.zoom);
+  const { x, y, width, height, cursor, backgroundColor, config, id } = frame;
+  const _x = zoomedX(x, frame.zoom);
+  const _y = zoomedY(y, frame.zoom);
+  const _width = zoomed(width, frame.zoom);
+  const _height = zoomed(height, frame.zoom);
   const { getControl } = config;
   const { setHover, removeHover } = getControl();
-  const isHoverScreen = cursor.inScreen();
-  const isHoverTitle = cursor.inTitle();
-  const isHover = isHoverScreen || isHoverTitle;
+  const isHover = cursor.inTitle();
 
   if (isHover) {
     setHover(id);
@@ -28,7 +26,7 @@ export const DrawPage = (
   ctx.beginPath();
   ctx.rect(_x, _y, _width, _height);
   ctx.clip();
-  DrawChildrenComponent(ctx, screen, []);
+  DrawChildrenComponent(ctx, frame, []);
   ctx.closePath();
   ctx.restore();
 };

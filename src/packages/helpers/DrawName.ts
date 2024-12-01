@@ -14,10 +14,9 @@ export const DrawName = (
   ctx.font = `400 ${titleConfig.fontSize}px Inter, sans-serif`;
   const isSelection = selection[0] === id;
 
-  const isInScreen = cursor.inScreen();
   const isInTitle = cursor.inTitle();
   const modeResize = cursor.getApp().modeResize;
-  const isHover = ((isInTitle || isInScreen) && !modeResize) || isSelection;
+  const isHover = (isInTitle && !modeResize) || isSelection;
 
   if (isInTitle) {
     setTitleHover({ id, config: titleConfig });

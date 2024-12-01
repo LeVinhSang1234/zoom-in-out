@@ -6,7 +6,7 @@ export type Bounds = {
 };
 
 export const enum ComponentAppType {
-  SCREEN = "Screen",
+  FRAME = "FRAME",
   TEXT = "text",
   GROUP = "group",
 }

@@ -21,7 +21,7 @@ const screens: ComponentBase[] = [
         type: ComponentAppType.TEXT,
       },
     ],
-    type: ComponentAppType.SCREEN,
+    type: ComponentAppType.FRAME,
   },
   {
     id: "6e12c422cbcf",
@@ -31,7 +31,7 @@ const screens: ComponentBase[] = [
     x: 475,
     y: 0,
     children: [],
-    type: ComponentAppType.SCREEN,
+    type: ComponentAppType.FRAME,
   },
 ];
 

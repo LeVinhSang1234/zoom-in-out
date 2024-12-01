@@ -6,9 +6,9 @@ const scaleLine = 0.3;
 
 export const DrawFramePixel = (
   ctx: CanvasRenderingContext2D,
-  screen: { layout: WindowSize; zoom: Zoom; config: CanvasContextValue }
+  frame: { layout: WindowSize; zoom: Zoom; config: CanvasContextValue }
 ) => {
-  const { layout, zoom, config } = screen;
+  const { layout, zoom, config } = frame;
   const { width, height } = getSize(layout, config.ratio || RATIO);
   const newWidth = width / scaleLine;
   const newHeight = height / scaleLine;

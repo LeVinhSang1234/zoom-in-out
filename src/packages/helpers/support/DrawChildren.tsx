@@ -13,7 +13,7 @@ type TDraw = {
 export const DrawWithType: TDraw = {
   [ComponentAppType.GROUP]: DrawGroup,
   [ComponentAppType.TEXT]: DrawText,
-  [ComponentAppType.SCREEN]: () => null,
+  [ComponentAppType.FRAME]: DrawGroup,
 };
 
 export const DrawChildrenComponent = (
