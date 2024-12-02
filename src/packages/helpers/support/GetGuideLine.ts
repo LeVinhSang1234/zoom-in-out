@@ -3,7 +3,8 @@ import { ComponentApp, ModeResize, TGuideLine } from "../../types";
 export const GetGuideLine = (
   components: ComponentApp[],
   screen: ComponentApp,
-  guideLine: TGuideLine[]
+  guideLine: TGuideLine[],
+  { x: xParent, y: yParent }: { x: number; y: number } = { x: 0, y: 0 }
 ) => {
   const app = screen.cursor.getApp();
   const { selection } = screen.config.getControl();
@@ -45,7 +46,13 @@ export const GetGuideLine = (
     const { x, y, width, height } = screen;
     for (const component of components) {
       if (component.id === screen.id) continue;
-      const { x: _x, y: _y, width: _width, height: _height } = component;
+      const { x: xChild, y: yChild } = component;
+
+      const _x = xParent + xChild;
+      const _y = yParent + yChild;
+      const _width = component.width;
+      const _height = component.height;
+
       if (x > _x - space && x < _x + space && isLeft) {
         if (!guideLine.length || !guideLine.some((e) => e.x === _x)) {
           guideLine.push({ x: _x, modeX: ModeResize.LEFT });
@@ -93,6 +100,9 @@ export const GetGuideLine = (
         if (!guideLine.length || !guideLine.some((e) => e.y === _y)) {
           guideLine.push({ y: _y, modeY: ModeResize.BOTTOM });
         }
+      }
+      if (component.children?.length) {
+        GetGuideLine(component.children, screen, guideLine, { x: _x, y: _y });
       }
     }
     for (const line of guideLine) {

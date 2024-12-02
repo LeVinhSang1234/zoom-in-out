@@ -15,6 +15,6 @@ export const TITLE_PAGE_HOVER_COLOR = "#76b6e4";
 export const SCALE_VISIBLE_FRAME = 10;
 export const SIZE_BOX_RESIZE = 6;
 export const COLOR_GUIDE_LINE = "#FF4747";
-export const GUIDE_LINE_DISTANCE = 6;
+export const GUIDE_LINE_DISTANCE = 3;
 export const COLOR_TEXT = "#2F3035";
 export const FONT_FAMILY = "Inter, sans-serif";

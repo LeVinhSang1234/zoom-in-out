@@ -17,7 +17,7 @@ const screens: ComponentBase[] = [
         height: 30,
         text: "Text",
         x: 0,
-        y: 0,
+        y: 20,
         type: ComponentAppType.TEXT,
       },
     ],
