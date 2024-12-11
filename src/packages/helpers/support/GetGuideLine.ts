@@ -13,7 +13,7 @@ export const GetGuideLine = (
 
   const space = Math.max(guideLineDistance / screen.zoom.scale, 4);
 
-  if (!isSelection || isPressSpace) return;
+  if (!isSelection || isPressSpace || !app.isMouseMove) return;
   const { cursorDowning, modeResize } = app;
   if (cursorDowning && modeResize) {
     const isLeft = [

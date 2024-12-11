@@ -72,6 +72,7 @@ export type AppControl = {
   cursorDowning?: Pointer & Mouse; // Check mouse down sẽ cho phép drag screen
   cursor?: Pointer & Mouse;
   sizeBegin?: Pointer & WindowSize;
+  isMouseMove?: boolean;
 };
 
 export type ComponentCursor = {

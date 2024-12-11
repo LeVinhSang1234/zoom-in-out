@@ -126,6 +126,7 @@ class Canvas extends Component<CanvasProps> {
 
   private onMouseMove = (event: MouseEvent) => {
     if (!this.canvas) return;
+    if (this.app.cursorDowning) this.app.isMouseMove = true;
     this.calculateMouse(event);
     this.draw();
   };
@@ -296,6 +297,7 @@ class Canvas extends Component<CanvasProps> {
   private onMouseUp = () => {
     this.app.cursorDowning = undefined;
     this.app.sizeBegin = undefined;
+    this.app.isMouseMove = false;
     if (this.app.isPressSpace) this.canvasGrab();
     else if (!this.app.modeResize) this.canvasCursor();
     this.draw();
