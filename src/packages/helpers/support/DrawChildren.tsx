@@ -6,7 +6,7 @@ type TDraw = {
   [key in ComponentAppType]: (
     ctx: CanvasRenderingContext2D,
     component: ComponentApp,
-    parent: ComponentApp[]
+    parent: ComponentApp[],
   ) => void;
 };
 

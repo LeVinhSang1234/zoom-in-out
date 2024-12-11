@@ -14,6 +14,7 @@ import {
   AppControl,
   CanvasContextValue,
   ComponentApp,
+  ComponentAppType,
   ComponentBase,
   KEYBOARD_CODE,
   ModeResize,
@@ -181,7 +182,9 @@ class Canvas extends Component<CanvasProps> {
     GetGuideLine(components, _component, guideLine);
 
     // ------- Title --------- //
-    makeTitle(this.ctx!, _component);
+    if (_component.type === ComponentAppType.FRAME) {
+      makeTitle(this.ctx!, _component);
+    }
     if (_component.children?.length) {
       for (const component of _component.children) {
         this.addContextToComponent(components, component, config, guideLine);
@@ -273,13 +276,13 @@ class Canvas extends Component<CanvasProps> {
 
     const { getControl } = this.props;
     const control = getControl();
-    const { titleEdited, titleHover, setSelection } = control;
+    const { titleEdited, setSelection, hover } = control;
     if (titleEdited) control.removeTitleEdited(titleEdited.id);
 
     if (modeResize) return;
 
-    if (titleHover?.id) {
-      setSelection([titleHover.id]);
+    if (hover) {
+      setSelection([hover]);
       this.app.modeResize = ModeResize.DRAG_DROP;
     } else setSelection([]);
 

@@ -76,7 +76,6 @@ export type AppControl = {
 };
 
 export type ComponentCursor = {
-  inScreen: () => boolean;
   inTitle: () => boolean;
   triggerModeResize: (mode?: ModeResize) => void;
   getApp: () => AppControl;

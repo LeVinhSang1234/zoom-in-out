@@ -93,23 +93,13 @@ export const configCursor = (screen: ComponentApp) => {
   const { zoom, config } = screen;
   screen.cursor = {
     inTitle: () => {
-      if (config.isPressSpace) return false;
+      if (config.isPressSpace || !screen.titleConfig) return false;
       return isHoved(zoom.mouse, {
         width: screen.titleConfig.width,
         height: screen.titleConfig.heightCanvas,
         x: screen.titleConfig.xCanvas,
         y: screen.titleConfig.y,
       });
-    },
-    inScreen: () => {
-      if (config.isPressSpace) return false;
-      const isHovePage = isHoved(zoom.mouse, {
-        width: zoomed(screen.width, screen.zoom),
-        height: zoomed(screen.height, screen.zoom),
-        x: zoomedX(screen.x, screen.zoom),
-        y: zoomedY(screen.y, screen.zoom),
-      });
-      return isHovePage;
     },
   } as ComponentCursor;
 };
