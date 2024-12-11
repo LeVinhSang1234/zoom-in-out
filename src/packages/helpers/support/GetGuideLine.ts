@@ -77,6 +77,30 @@ export const GetGuideLine = (
           guideLine.push({ x: _x, modeX: ModeResize.RIGHT });
         }
       }
+      if (
+        x + width > _x + _width / 2 - space &&
+        x + width < _x + _width / 2 + space &&
+        isRight
+      ) {
+        if (
+          !guideLine.length ||
+          !guideLine.some((e) => e.x === _x + _width / 2)
+        ) {
+          guideLine.push({ x: _x + _width / 2, modeX: ModeResize.RIGHT });
+        }
+      }
+      if (
+        x > _x + _width / 2 - space &&
+        x < _x + _width / 2 + space &&
+        isRight
+      ) {
+        if (
+          !guideLine.length ||
+          !guideLine.some((e) => e.x === _x + _width / 2)
+        ) {
+          guideLine.push({ x: _x + _width / 2, modeX: ModeResize.LEFT });
+        }
+      }
       if (y > _y - space && y < _y + space && isTop) {
         if (!guideLine.length || !guideLine.some((e) => e.y === _y)) {
           guideLine.push({ y: _y, modeY: ModeResize.TOP });

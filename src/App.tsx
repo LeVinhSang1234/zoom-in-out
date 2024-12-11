@@ -13,7 +13,7 @@ const screens: ComponentBase[] = [
     children: [
       {
         id: "7df2236d89c3",
-        width: 200,
+        width: 100,
         height: 30,
         text: "Text",
         x: 0,
