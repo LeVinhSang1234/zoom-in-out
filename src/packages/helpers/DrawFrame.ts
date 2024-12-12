@@ -16,7 +16,7 @@ export const DrawFrame = (
   const isHover = cursor.inTitle();
 
   if (isHover) {
-    setHover(id);
+    setHover(id, []);
   } else removeHover(id);
 
   ctx.save();

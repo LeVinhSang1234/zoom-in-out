@@ -1,14 +1,14 @@
 import { CanvasControlContext } from "../context/canvas";
-import { TCanvasControl, TitleReq } from "../types";
+import { ComponentApp, TCanvasControl, TitleReq } from "../types";
 import { PropsWithChildren, useCallback, useRef } from "react";
 
 export const CanvasControlProvider = ({ children }: PropsWithChildren) => {
-  const selection = useRef<string[]>([]);
-  const hover = useRef<string>();
+  const selection = useRef<{ id: string; parents: ComponentApp[] }[]>([]);
+  const hover = useRef<{ id: string; parents: ComponentApp[] }>();
   const title = useRef<TitleReq>();
   const titleEdited = useRef<{ id: string; input?: HTMLInputElement }>();
 
-  const setSelection = useCallback((_selection: string[]) => {
+  const setSelection = useCallback((_selection: { id: string; parents: ComponentApp[] }[]) => {
     selection.current = _selection;
   }, []);
 
@@ -33,12 +33,12 @@ export const CanvasControlProvider = ({ children }: PropsWithChildren) => {
     if (title.current?.id === id) title.current = undefined;
   }, []);
 
-  const setHover = useCallback((id: string) => {
-    hover.current = id;
+  const setHover = useCallback((id: string, parents: ComponentApp[]) => {
+    hover.current = { id, parents };
   }, []);
 
   const removeHover = useCallback((id: string) => {
-    if (hover.current === id) hover.current = undefined;
+    if (hover.current?.id === id) hover.current = undefined;
   }, []);
 
   const getControl = useCallback((): TCanvasControl => {

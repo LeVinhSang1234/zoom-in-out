@@ -12,7 +12,7 @@ export const DrawName = (
 
   ctx.save();
   ctx.font = `400 ${titleConfig.fontSize}px Inter, sans-serif`;
-  const isSelection = selection[0] === id;
+  const isSelection = selection[0]?.id === id;
 
   const isInTitle = cursor.inTitle();
   const modeResize = cursor.getApp().modeResize;

@@ -5,7 +5,7 @@ export const AppendResize = (screen: ComponentApp) => {
   const app = screen.cursor.getApp();
   const zoom = screen.zoom;
   const { selection } = screen.config.getControl();
-  const isSelection = selection[0] === screen.id;
+  const isSelection = selection[0]?.id === screen.id;
   const isPressSpace = screen.config.isPressSpace;
 
   if (!isSelection || isPressSpace) return;

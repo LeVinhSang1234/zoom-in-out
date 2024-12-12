@@ -22,7 +22,7 @@ export const DrawGroup = (
   const _h = zoomed(height, group.zoom);
 
   const isHover = isHoved(zoom.mouse, { width: _w, height: _h, x: _x, y: _y });
-  if (isHover) setHover(id);
+  if (isHover) setHover(id, parents);
   else removeHover(id);
 
   ctx.save();

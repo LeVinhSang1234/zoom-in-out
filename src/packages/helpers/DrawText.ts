@@ -38,13 +38,13 @@ export const DrawText = (
   const _h = zoomed(height, zoom);
 
   const isHover = isHoved(zoom.mouse, { width: _w, height: _h, x: _x, y: _y });
-  if (isHover) setHover(id);
+  if (isHover) setHover(id, parents);
   else removeHover(id);
 
   const maxWidth = zoomed(width, zoom);
   ctx.save();
   ctx.beginPath();
-  if (selection?.[0] !== id) {
+  if (selection?.[0]?.id !== id) {
     ctx.rect(_x, _y, _w, _h);
     ctx.clip();
   }

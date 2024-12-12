@@ -8,7 +8,7 @@ export const GetGuideLine = (
 ) => {
   const app = screen.cursor.getApp();
   const { selection } = screen.config.getControl();
-  const isSelection = selection[0] === screen.id;
+  const isSelection = selection[0]?.id === screen.id;
   const { isPressSpace, guideLineDistance } = screen.config;
 
   const space = Math.max(guideLineDistance / screen.zoom.scale, 4);

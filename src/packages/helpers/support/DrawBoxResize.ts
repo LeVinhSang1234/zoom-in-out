@@ -38,10 +38,16 @@ export const DrawBoxResize = (
   const { selection, hover } = config.getControl();
   const { modeResize, cursorDowning, sizeBegin } = cursor.getApp();
 
-  const isSelection = selection[0] === id;
-  const isHover = (hover === id && !modeResize) || (modeResize && isSelection);
+  const isSelection = selection[0]?.id === id;
+  const { id: _id, parents: _parents = [] } = hover || {};
+  const isHover =
+    (modeResize && isSelection) ||
+    (_id === id && _parents.length < 2 && !modeResize) ||
+    (_id !== id && _parents[1]?.id === id && !selection?.length);
+  const _pSelect = selection[0]?.parents || [];
 
-  if (!isHover && !isSelection) {
+  const isDashed = _pSelect.length > 1 && _pSelect.last()?.id === id;
+  if (!isHover && !isSelection && !isDashed) {
     return DrawBoxResizeChildren(ctx, screen, parents);
   }
 
@@ -61,6 +67,10 @@ export const DrawBoxResize = (
   ctx.strokeStyle = getColorHover(screen.type, config);
   const lineW = lineWidth + (isHover ? 1 : 0);
   const half = lineW / 2;
+
+  if (isDashed && !isHover) {
+    ctx.setLineDash([1, 2]);
+  }
   ctx.lineWidth = lineW;
   ctx.strokeRect(_x - half, _y - half, _width + lineW, _height + lineW);
   ctx.restore();

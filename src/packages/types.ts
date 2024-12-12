@@ -134,15 +134,15 @@ export type CanvasContextValue = {
 export type TitleReq = { id: string; config: TitleConfig };
 
 export type TCanvasControl = {
-  selection: string[];
+  selection: { id: string; parents: ComponentApp[] }[];
   titleHover?: TitleReq;
-  hover?: string;
+  hover?: { id: string; parents: ComponentApp[] };
   titleEdited?: { id: string; input?: HTMLInputElement };
-  setSelection: (selection: string[]) => void;
+  setSelection: (selection: { id: string; parents: ComponentApp[] }[]) => void;
   setTitleHover: (req: TitleReq) => void;
   setTitleEdited: (id: string) => void;
   removeTitleEdited: (id: string) => void;
-  setHover: (id: string) => void;
+  setHover: (id: string, parents: ComponentApp[]) => void;
   removeHover: (id: string) => void;
   removeTitleHover: (id: string) => void;
 };
@@ -183,3 +183,13 @@ export enum ModeResize {
   BOTTOM = "bottom",
   DRAG_DROP = "drag_drop",
 }
+
+declare global {
+  interface Array<T> {
+    last(): T | undefined;
+  }
+}
+// eslint-disable-next-line no-extend-native
+Array.prototype.last = function <T>(): T | undefined {
+  return this.length > 0 ? this[this.length - 1] : undefined;
+};

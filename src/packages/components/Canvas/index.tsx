@@ -282,6 +282,7 @@ class Canvas extends Component<CanvasProps> {
     if (modeResize) return;
 
     if (hover) {
+      // TODO set double click
       setSelection([hover]);
       this.app.modeResize = ModeResize.DRAG_DROP;
     } else setSelection([]);
@@ -291,7 +292,7 @@ class Canvas extends Component<CanvasProps> {
 
   private onDoubleClick = (event: MouseEvent) => {
     const { titleHover, setTitleEdited, selection } = this.props.getControl();
-    if (titleHover && selection.includes(titleHover?.id)) {
+    if (titleHover && selection.find((e) => e.id === titleHover?.id)) {
       setTitleEdited(titleHover.id);
       this.draw();
     } else this.onMouseDown(event);
