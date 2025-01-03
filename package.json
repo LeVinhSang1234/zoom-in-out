@@ -1,6 +1,6 @@
 {
   "name": "@react-scroll-inverted/react-scroll",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "private": false,
   "license": "UNLICENSED",
   "description": "react scroll inverted",
@@ -10,13 +10,7 @@
   "homepage": "https://github.com/LeVinhSang1234/zoom-in-out/tree/feature/frame-chat",
   "dependencies": {},
   "scripts": {},
-  "files": [
-    "lib"
-  ],
+  "files": ["lib"],
   "devDependencies": {},
-  "keywords": [
-    "react scroll inverted",
-    "react",
-    "scroll inverted"
-  ]
+  "keywords": ["react scroll inverted", "react", "scroll inverted"]
 }

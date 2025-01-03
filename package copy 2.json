@@ -1,9 +1,9 @@
 {
   "name": "@react-scroll-inverted/react-scroll",
-  "version": "1.0.0",
+  "version": "2.0.7",
   "private": false,
   "license": "UNLICENSED",
-  "description": "react zoom in, zoom out",
+  "description": "react scroll inverted",
   "main": "lib/commonjs/index.js",
   "types": "lib/commonjs/index.d.ts",
   "author": "SangLv <lsang2884@gmail.com>",

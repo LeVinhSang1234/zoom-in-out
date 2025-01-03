@@ -10,14 +10,7 @@ function App() {
 
   return (
     <Fragment>
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          padding: "0 20px",
-        }}
-      >
+      <div style={{ width: "100%", height: "100%", display: "flex" }}>
         <ScrollInverted
           renderItem={({ item }) => (
             <div>
