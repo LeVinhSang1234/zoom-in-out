@@ -1,4 +1,9 @@
-import { CSSProperties, PureComponent, ReactNode } from "react";
+import {
+  CSSProperties,
+  PureComponent,
+  ReactNode,
+  WheelEvent as WheelEventReact,
+} from "react";
 
 const clsx = (...args: (string | false | undefined | null | number)[]) => {
   return args.filter(Boolean).join(" ").trim();
@@ -49,6 +54,7 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
   private styleDom?: HTMLStyleElement;
 
   private isEnd?: boolean;
+  private isWheel?: boolean;
 
   constructor(props: ScrollInvertedProps<T>) {
     super(props);
@@ -178,6 +184,7 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
   };
 
   private onWheel = (event: WheelEvent) => {
+    this.isWheel = true;
     if (!this.divScroll) return;
     event.preventDefault();
     const { scrollTop, scrollHeight } = this.divScroll;
@@ -243,9 +250,12 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
     return;
   };
 
-  private onScrollMobile = () => {
+  private onScrollMobile = (event: WheelEventReact<HTMLDivElement>) => {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (!isMobile) return;
+    if (isMobile) return this.beginFrameAnimated();
+    if (this.isWheel) return (this.isWheel = false);
+    const { onScroll } = this.props;
+    onScroll?.((event.target as HTMLDivElement).scrollTop);
     this.beginFrameAnimated();
   };
 
