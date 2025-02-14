@@ -5,7 +5,7 @@ declare module "@react-scroll-inverted/react-scroll" {
     className?: string;
     classNameContentContainer?: string;
     onScrollEnd?: () => void;
-    onScroll?: (top: number) => void;
+    onScroll?: (top: number, isUserScrolling: boolean) => void;
     initialScrollTop?: number;
     styleWrap?: CSSProperties;
     style?: CSSProperties;
