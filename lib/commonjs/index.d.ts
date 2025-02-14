@@ -27,7 +27,7 @@ declare module "@react-scroll-inverted/react-scroll" {
     keyExtractor?: (item: T, index: number) => string | number;
   };
 
-  export class ScrollInverted<T> extends PureComponent<ScrollInvertedProps<T>> {
+  export class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
     scrollTo(options: ScrollToOptions): void;
     scrollToTop(options?: ScrollBehavior): void;
     scrollToEnd(options?: ScrollBehavior): void;

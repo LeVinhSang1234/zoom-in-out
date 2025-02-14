@@ -31,7 +31,7 @@ type ScrollInvertedProps<T> = {
   keyExtractor?: (item: T, index: number) => string | number;
 };
 
-class ScrollInverted<T> extends PureComponent<ScrollInvertedProps<T>> {
+class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
   private timeoutEnd?: NodeJS.Timeout;
   private divScroll?: HTMLDivElement | null;
 
