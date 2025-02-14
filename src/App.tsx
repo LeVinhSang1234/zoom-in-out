@@ -26,6 +26,7 @@ function App() {
           onEndReached={() => {
             console.log("onEndReached");
           }}
+          onScroll={console.log}
           onLayout={() => {
             refScroll.current?.scrollToEnd("smooth");
           }}

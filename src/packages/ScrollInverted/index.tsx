@@ -14,7 +14,7 @@ type ScrollInvertedProps<T> = {
   className?: string;
   classNameContentContainer?: string;
   onScrollEnd?: () => void;
-  onScroll?: (top: number) => void;
+  onScroll?: (top: number, isUserScrolling: boolean) => void;
   initialScrollTop?: number;
   styleWrap?: CSSProperties;
   style?: CSSProperties;
@@ -55,6 +55,8 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
 
   private isEnd?: boolean;
   private isWheel?: boolean;
+  private isCallScrollTo?: boolean;
+  private timeout?: NodeJS.Timeout;
 
   constructor(props: ScrollInvertedProps<T>) {
     super(props);
@@ -73,6 +75,7 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
       ]);
     } catch {}
     this.divScroll?.addEventListener("wheel", this.onWheel, { passive: false });
+    (window as any).div = this.divScroll;
   }
 
   componentWillUnmount(): void {
@@ -86,6 +89,7 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
     if (!this.preScrollTop) {
       const { scrollHeight } = this.divScroll;
       if (scrollHeight !== this.scrollHeight) {
+        this.isCallScrollTo = true;
         this.divScroll.scrollTo({ top: scrollHeight - this.scrollHeight });
       }
     }
@@ -168,6 +172,7 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
   private scrollToInit = async () => {
     const { initialScrollTop } = this.props;
     if (!this.divScroll || !initialScrollTop) return;
+    this.isCallScrollTo = true;
     this.divScroll.scrollTo({ top: initialScrollTop });
   };
 
@@ -201,6 +206,7 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
     const { onScrollEnd } = this.props;
     onScrollEnd?.();
     this.onReached();
+    this.isCallScrollTo = false;
   };
 
   private onScrollEnd = () => {
@@ -216,7 +222,7 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
       this.isEnd = false;
       this.modeScroll = scrollTop < this.preScrollTop ? "down" : "up";
       const { onScroll } = this.props;
-      onScroll?.(scrollTop);
+      onScroll?.(scrollTop, !this.isCallScrollTo);
       this.preScrollTop = scrollTop;
       this.frameRequest = window.requestAnimationFrame(this.beginFrameAnimated);
     } else if (!this.isEnd) {
@@ -250,23 +256,22 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
     return;
   };
 
-  private onScrollMobile = (event: WheelEventReact<HTMLDivElement>) => {
+  private onScrollMobile = () => {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    if (isMobile) return this.beginFrameAnimated();
-    if (this.isWheel) return (this.isWheel = false);
-    const { onScroll } = this.props;
-    onScroll?.((event.target as HTMLDivElement).scrollTop);
+    if (this.isWheel && !isMobile) return (this.isWheel = false);
     this.beginFrameAnimated();
   };
 
   scrollTo = (options: ScrollToOptions) => {
     if (!this.divScroll) return;
+    this.isCallScrollTo = true;
     this.divScroll.scrollTo(options);
     this.beginFrameAnimated();
   };
 
   scrollToEnd = (behavior?: ScrollBehavior) => {
     if (!this.divScroll) return;
+    this.isCallScrollTo = true;
     this.divScroll.scrollTo({ top: 0, behavior });
     this.beginFrameAnimated();
   };
@@ -274,6 +279,7 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
   scrollToTop = (behavior?: ScrollBehavior) => {
     if (!this.divScroll) return;
     const { scrollHeight } = this.divScroll;
+    this.isCallScrollTo = true;
     this.divScroll.scrollTo({ top: scrollHeight, behavior });
     this.beginFrameAnimated();
   };
