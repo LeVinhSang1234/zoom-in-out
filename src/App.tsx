@@ -3,7 +3,7 @@ import ScrollInverted from "./packages/ScrollInverted";
 
 function App() {
   const [state1, setState1] = useState(
-    new Array(10).fill(null).map((_, i) => `${i + 1} Text`)
+    new Array(20).fill(null).map((_, i) => `${i + 1} Text`)
   );
 
   const refScroll = useRef<ScrollInverted<(typeof state1)[0]>>(null);
@@ -26,6 +26,7 @@ function App() {
           onEndReached={() => {
             console.log("onEndReached");
           }}
+          initialScrollIndex={3}
           onScroll={console.log}
           onLayout={() => {
             refScroll.current?.scrollToEnd("smooth");

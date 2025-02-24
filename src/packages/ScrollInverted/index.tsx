@@ -1,8 +1,8 @@
 import {
   CSSProperties,
+  PropsWithChildren,
   PureComponent,
   ReactNode,
-  WheelEvent as WheelEventReact,
 } from "react";
 
 const clsx = (...args: (string | false | undefined | null | number)[]) => {
@@ -15,7 +15,7 @@ type ScrollInvertedProps<T> = {
   classNameContentContainer?: string;
   onScrollEnd?: () => void;
   onScroll?: (top: number, isUserScrolling: boolean) => void;
-  initialScrollTop?: number;
+  initialScrollIndex?: number;
   styleWrap?: CSSProperties;
   style?: CSSProperties;
   styleContentContainer?: CSSProperties;
@@ -170,10 +170,10 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
   };
 
   private scrollToInit = async () => {
-    const { initialScrollTop } = this.props;
-    if (!this.divScroll || !initialScrollTop) return;
+    const { initialScrollIndex } = this.props;
+    if (!this.divScroll || !initialScrollIndex) return;
     this.isCallScrollTo = true;
-    this.divScroll.scrollTo({ top: initialScrollTop });
+    this.scrollToIndex(initialScrollIndex);
   };
 
   private getLayout = async () => {
@@ -284,6 +284,17 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
     this.beginFrameAnimated();
   };
 
+  scrollToIndex = (index: number, behavior?: ScrollBehavior) => {
+    const element = document.getElementById(`item-render-${index}`);
+    if (!element || !this.divScroll) return;
+    const { top: topElement } = element.getBoundingClientRect();
+    const parent = this.divScroll.getBoundingClientRect();
+    this.divScroll.scrollTo({
+      top: parent.top - topElement + this.divScroll.scrollTop,
+      behavior,
+    });
+  };
+
   private getReverse = () => {
     const { data = [] } = this.props;
     return [...data].reverse();
@@ -300,6 +311,9 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
       renderItem,
       keyExtractor,
     } = this.props;
+
+    const dataRender = this.getReverse();
+
     return (
       <div
         className={clsx("scroll-inverted-wrap", classNameWrap)}
@@ -320,8 +334,11 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
             ref={(ref) => (this.divContentWrap = ref)}
           >
             <div ref={(ref) => (this.divContent = ref)}>
-              {this.getReverse().map((item, index) => (
-                <ItemRenderring key={keyExtractor?.(item, index) || index}>
+              {dataRender.map((item, index) => (
+                <ItemRenderring
+                  key={keyExtractor?.(item, index) || index}
+                  id={`item-render-${dataRender.length - index}`}
+                >
                   {renderItem?.({ item, index })}
                 </ItemRenderring>
               ))}
@@ -333,11 +350,11 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
   }
 }
 
-class ItemRenderring extends PureComponent<{ children?: ReactNode }> {
+class ItemRenderring extends PureComponent<PropsWithChildren<{ id: string }>> {
   render() {
-    const { children } = this.props;
+    const { children, id } = this.props;
     return (
-      <div style={{ width: "100%", transform: "rotate(180deg)" }}>
+      <div id={id} style={{ width: "100%", transform: "rotate(180deg)" }}>
         {children}
       </div>
     );
