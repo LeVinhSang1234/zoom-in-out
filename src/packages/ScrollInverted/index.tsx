@@ -56,7 +56,6 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
   private isEnd?: boolean;
   private isWheel?: boolean;
   private isCallScrollTo?: boolean;
-  private timeout?: NodeJS.Timeout;
 
   constructor(props: ScrollInvertedProps<T>) {
     super(props);
@@ -337,7 +336,7 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
               {dataRender.map((item, index) => (
                 <ItemRenderring
                   key={keyExtractor?.(item, index) || index}
-                  id={`item-render-${dataRender.length - index}`}
+                  id={`item-render-${dataRender.length - index - 1}`}
                 >
                   {renderItem?.({ item, index })}
                 </ItemRenderring>

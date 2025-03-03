@@ -38,6 +38,11 @@ function App() {
       >
         add data
       </button>
+      <button
+        onClick={() => refScroll.current?.scrollToIndex(0)}
+      >
+        add data
+      </button>
     </Fragment>
   );
 }
