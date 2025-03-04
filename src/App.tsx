@@ -39,7 +39,7 @@ function App() {
         add data
       </button>
       <button
-        onClick={() => refScroll.current?.scrollToIndex(0)}
+        onClick={() => refScroll.current?.scrollToIndex(4)}
       >
         add data
       </button>

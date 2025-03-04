@@ -34,5 +34,6 @@ declare module "@react-scroll-inverted/react-scroll" {
     scrollToTop(options?: ScrollBehavior): void;
     scrollToEnd(options?: ScrollBehavior): void;
     scrollToIndex(index: number, behavior?: ScrollBehavior): void;
+    scrollIntoView(index: number, behavior?: ScrollBehavior): void;
   }
 }
