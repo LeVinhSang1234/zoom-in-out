@@ -287,7 +287,6 @@ class ScrollInverted<T = any> extends PureComponent<ScrollInvertedProps<T>> {
     const element = document.getElementById(`item-render-${index}`);
     if (!element || !this.divScroll) return;
     const { top: topElement } = element.getBoundingClientRect();
-    console.log("top", topElement);
     const parent = this.divScroll.getBoundingClientRect();
     this.divScroll.scrollTo({
       top: parent.top - topElement + this.divScroll.scrollTop,
