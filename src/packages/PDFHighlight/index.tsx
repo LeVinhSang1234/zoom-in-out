@@ -1,6 +1,6 @@
 import { Component, CSSProperties } from "react";
 
-type Contents = {
+interface Contents {
   str: string;
   dir: string;
   width: number;
@@ -8,16 +8,17 @@ type Contents = {
   transform: number[];
   fontName: string;
   hasEOL: boolean;
-};
+}
 
-export type ReplaceText = {
+export interface ReplaceText {
   search: string;
   replace: string;
   color?: string; // text color, default: the page's ink
   background?: string; // covers the original glyphs, default: the page's paper
-};
+  highlight?: boolean;
+}
 
-type Props = {
+interface Props {
   url?: string;
   width?: number | string;
   scale?: number;
@@ -27,6 +28,8 @@ type Props = {
   onStartLoad?: (error?: any) => void;
   keywords?: string[];
   colorHighlight?: string;
+  colorKeyword?: string;
+  ignoreCase?: boolean;
   isBorderHighlight?: boolean;
   styleWrap?: CSSProperties;
   debug?: boolean;
@@ -38,11 +41,18 @@ type Props = {
   // The app's own pdf.js (e.g. `import * as pdfjs from "pdfjs-dist"`). Without
   // it a global pdfjsLib is reused, else pdf.js 3.11.174 comes from cdnjs.
   pdfjs?: any;
-};
+}
 
-type TextStyle = { fontFamily: string; ascent: number; descent: number };
-type TextContent = { items: Contents[]; styles: Record<string, TextStyle> };
-type PageEntry = {
+interface TextStyle {
+  fontFamily: string;
+  ascent: number;
+  descent: number;
+}
+interface TextContent {
+  items: Contents[];
+  styles: Record<string, TextStyle>;
+}
+interface PageEntry {
   pagePdf: any;
   div: HTMLDivElement;
   base: HTMLCanvasElement;
@@ -52,16 +62,20 @@ type PageEntry = {
   task?: any;
   textLayer?: HTMLDivElement;
   colors: Map<string, Colors>; // sampled from the rendered page, by region
-};
-type PageIndex = {
+}
+interface PageIndex {
   text: string;
   item: number[];
   off: number[];
   rep: number[]; // -1 for PDF text, else the index into reps
   items: Contents[];
   reps: ReplaceSlice[];
-};
-type Slice = { item: Contents; start: number; end: number };
+}
+interface Slice {
+  item: Contents;
+  start: number;
+  end: number;
+}
 // A replaced piece of one item. The replacement text for a whole visual line
 // sits on the line's first piece; `line` lists every piece of that line and
 // `whole` every piece of the match.
@@ -73,10 +87,10 @@ type ReplaceSlice = Slice & {
 };
 // A text item as displayed; items made by a reflow carry their rule when they
 // hold replacement text.
-type Item = Contents & { rule?: ReplaceText };
+type Item = Contents & { rule?: ReplaceText; dy?: number };
 // Items [first, last] on one baseline (canvas px); a wide gap ends a segment
 // so table cells and columns stay apart.
-type Segment = {
+interface Segment {
   first: number;
   last: number;
   text: boolean;
@@ -85,21 +99,36 @@ type Segment = {
   right: number;
   y: number;
   size: number;
-};
-type Rect = { x: number; y: number; w: number; h: number };
-type Colors = { paper: string; ink: string };
+}
+interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+interface Colors {
+  paper: string;
+  ink: string;
+}
 // A paragraph laid out again: new items replace items [first, last], drawn
 // over the `cover` rects that hide the original lines.
-type Flow = {
+interface Flow {
   first: number;
   last: number;
   items: Item[];
   cover: Rect[];
   background?: string;
-};
+  top: number;
+  bottom: number;
+  end: number;
+  x0: number;
+  x1: number;
+  grow: number;
+  offset: number;
+}
 // A text box in canvas px, relative to the baseline origin tx[4], tx[5] and
 // rotated by `angle`; `font`/`track` reproduce how the PDF sets that text.
-type Box = {
+interface Box {
   tx: number[];
   angle: number;
   x0: number;
@@ -108,15 +137,16 @@ type Box = {
   h: number;
   font: string;
   track: number;
-};
-type Paint = {
+}
+interface Paint {
   ctx: CanvasRenderingContext2D;
   tc: TextContent;
   viewport: any;
   pagePdf: any;
   base: HTMLCanvasElement;
   colors: Map<string, Colors>;
-};
+  dyAt: (x: number, y: number) => number;
+}
 
 const DEFAULT_CDN_PDFJS =
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
@@ -149,6 +179,17 @@ const withWorker = (lib: any) => {
   return lib;
 };
 
+const SERIF_FAMILY =
+  /times|roman|serif|georgia|cambria|garamond|book|palatino/i;
+
+const systemFamilyOf = (name: string) => {
+  const base = name
+    .replace(/^[A-Z]{6}\+/, "")
+    .split(/[-,]/)[0]
+    .replace(/(?:PSMT|PS|MT)$/, "");
+  return base.replace(/([a-z])([A-Z])/g, "$1 $2").trim();
+};
+
 const MAX_CANVAS_PIXELS = 8e6; // iOS Safari caps a canvas at 16.7M px
 const MAX_CONCURRENT_RENDERS = 2;
 // Pages within one viewport above/below the visible area get rendered; pages
@@ -159,6 +200,8 @@ const RENDER_MARGIN = "100% 0px";
 const HIGHLIGHT_KEYS: (keyof Props)[] = [
   "keywords",
   "colorHighlight",
+  "colorKeyword",
+  "ignoreCase",
   "isBorderHighlight",
   "pageSearch",
   "specialWordRemoves",
@@ -212,7 +255,7 @@ const loadPdfJs = (): Promise<any> =>
     script.onerror = () => {
       script.remove();
       pdfjsPromise = undefined;
-      rej(new Error("Failed to load pdf.js from " + DEFAULT_CDN_PDFJS));
+      rej(new Error(`Failed to load pdf.js from ${DEFAULT_CDN_PDFJS}`));
     };
     document.head.appendChild(script);
   }));
@@ -449,7 +492,7 @@ class PDFHighlight extends Component<Props> {
           });
           this.pump(gen);
         },
-        { root, rootMargin: RENDER_MARGIN }
+        { root, rootMargin: RENDER_MARGIN },
       );
       this.observer = observer;
       this.slots.forEach((div) => observer.observe(div));
@@ -492,7 +535,7 @@ class PDFHighlight extends Component<Props> {
     const dpr = window.devicePixelRatio || 1;
     const rasterScale = Math.min(
       Math.max(scale, (this.renderedWidth / vp1.width) * dpr),
-      Math.sqrt(MAX_CANVAS_PIXELS / (vp1.width * vp1.height))
+      Math.sqrt(MAX_CANVAS_PIXELS / (vp1.width * vp1.height)),
     );
     const viewport = pagePdf.getViewport({ scale: rasterScale });
     div.style.aspectRatio = `${vp1.width} / ${vp1.height}`;
@@ -563,12 +606,19 @@ class PDFHighlight extends Component<Props> {
     ctx.clearRect(0, 0, entry.hl.width, entry.hl.height);
     const { keywords = [], pageSearch, replaceTexts = [] } = this.props;
     const search = !!keywords.length && (!pageSearch || pageSearch === page);
-    if (!search && !replaceTexts.length) return;
+    if (!search && !replaceTexts.length) {
+      this.fitHeight(entry, 0);
+      return;
+    }
     const tc = await this.getText(entry.pagePdf, page);
     if (paint !== this.paintGen || this.pages.get(page) !== entry) return;
     const p = this.paintOf(entry, ctx, tc);
     const removes = this.props.specialWordRemoves || [];
     const { items, reps, flows } = this.layout(p);
+    const grow = flows.reduce((n, f) => n + f.grow, 0);
+    this.fitHeight(entry, Math.max(0, grow));
+    p.dyAt = (x: number, y: number) => this.shiftOf(flows, x, y);
+    if (flows.some((f) => f.grow)) this.shiftBelow(p, flows);
     // Replacements first, so highlights stay visible on top of them.
     this.drawReplacements(p, reps, page);
     flows.forEach((flow) => this.drawFlow(p, flow));
@@ -577,10 +627,76 @@ class PDFHighlight extends Component<Props> {
     this.drawHighlights(p, this.buildIndex(items, removes, reps), page);
   };
 
+  private fitHeight = (entry: PageEntry, grow: number) => {
+    const height = entry.base.height + Math.ceil(grow);
+    if (entry.hl.height !== height) entry.hl.height = height;
+    entry.div.style.aspectRatio = `${entry.vp1.width} / ${(entry.vp1.height * height) / entry.base.height}`;
+  };
+
+  private shiftOf = (flows: Flow[], x: number, y: number) =>
+    flows.reduce(
+      (n, f) =>
+        f.grow && (y >= f.end || (y >= f.bottom && x >= f.x0 && x <= f.x1))
+          ? n + f.grow
+          : n,
+      0,
+    );
+
+  private shiftBelow = (p: Paint, flows: Flow[]) => {
+    const { ctx, base } = p;
+    const move = (
+      x0: number,
+      y0: number,
+      x1: number,
+      y1: number,
+      before: number,
+      after: number,
+    ) => {
+      const left = Math.max(0, Math.floor(x0));
+      const right = Math.min(base.width, Math.ceil(x1));
+      const top = Math.max(0, Math.floor(y0));
+      const bottom = Math.min(base.height, Math.ceil(y1));
+      if (right <= left || bottom <= top) return;
+      const { paper } = this.colorsAt(p, [
+        { x: left, y: top, w: right - left, h: 4 },
+      ]);
+      const from = top + Math.min(before, after);
+      ctx.fillStyle = paper;
+      ctx.fillRect(left, from, right - left, ctx.canvas.height - from);
+      ctx.drawImage(
+        base,
+        left,
+        top,
+        right - left,
+        bottom - top,
+        left,
+        top + after,
+        right - left,
+        bottom - top,
+      );
+    };
+    ctx.save();
+    flows
+      .filter((f) => f.grow)
+      .sort((a, b) => a.bottom - b.bottom)
+      .forEach((f) => {
+        const mid = (Math.max(0, f.x0) + Math.min(base.width, f.x1)) / 2;
+        if (f.end > f.bottom) {
+          const after = this.shiftOf(flows, mid, f.bottom);
+          move(f.x0, f.bottom, f.x1, f.end, after - f.grow, after);
+        }
+        if (f.end < base.height) {
+          const after = this.shiftOf(flows, -1, f.end);
+          move(0, f.end, base.width, base.height, after - f.grow, after);
+        }
+      });
+    ctx.restore();
+  };
+
   private paintOf = (
     entry: PageEntry,
     ctx: CanvasRenderingContext2D,
-    tc: TextContent
+    tc: TextContent,
   ): Paint => ({
     ctx,
     tc,
@@ -588,6 +704,7 @@ class PDFHighlight extends Component<Props> {
     pagePdf: entry.pagePdf,
     base: entry.base,
     colors: entry.colors,
+    dyAt: () => 0,
   });
 
   // What the page shows: the PDF's items plus replaceTexts. A replacement too
@@ -595,7 +712,10 @@ class PDFHighlight extends Component<Props> {
   // paragraphs become new items); otherwise it is drawn in place.
   private layout = (p: Paint) => {
     const items: Item[] = p.tc.items;
-    const original = this.buildIndex(items, this.props.specialWordRemoves || []);
+    const original = this.buildIndex(
+      items,
+      this.props.specialWordRemoves || [],
+    );
     const reps = this.planReplacements(original);
     const flows: Flow[] = [];
     const long = reps.filter((r) => r === r.line[0] && this.overflows(p, r));
@@ -615,11 +735,15 @@ class PDFHighlight extends Component<Props> {
       const mine = reps.filter(inside);
       if (mine.some((r) => !r.whole.every(inside))) return; // match leaves it
       const flow = this.flow(p, para, mine, segs, at);
-      if (!flow) return; // needs more lines than it has: drawn scaled instead
+      if (!flow) return;
       flows.push(flow);
       mine.forEach((r) => flowed.add(r));
     });
     if (!flows.length) return { items, reps, flows };
+    flows.forEach((f) => {
+      f.offset = this.shiftOf(flows, f.cover[0].x + 1, f.top);
+      f.items.forEach((item) => (item.dy = f.offset));
+    });
     const shown: Item[] = [];
     let i = 0;
     flows
@@ -634,12 +758,13 @@ class PDFHighlight extends Component<Props> {
   };
 
   private overflows = (p: Paint, lead: ReplaceSlice) => {
-    if (!lead.text) return false;
     const b = this.lineBox(p, lead.line);
+    if (!lead.text) return b.w > b.h * 0.5;
     p.ctx.save();
     const k = this.useFont(p.ctx, b, lead.text);
+    const w = p.ctx.measureText(lead.text).width;
     p.ctx.restore();
-    return k < 0.99;
+    return k < 0.99 || b.w - w > b.h * 0.5;
   };
 
   private segments = (p: Paint): Segment[] => {
@@ -649,17 +774,38 @@ class PDFHighlight extends Component<Props> {
       const cur = out[out.length - 1];
       if (!item.str || !item.str.trim()) {
         if (cur) cur.last = i;
-        else out.push({ first: i, last: i, text: false, flat: false, x: 0, right: 0, y: 0, size: 0 });
+        else
+          out.push({
+            first: i,
+            last: i,
+            text: false,
+            flat: false,
+            x: 0,
+            right: 0,
+            y: 0,
+            size: 0,
+          });
         return;
       }
       const tx: number[] = Util.transform(p.viewport.transform, item.transform);
       const flat =
-        Math.abs(tx[1]) < 1e-6 && Math.abs(tx[2]) < 1e-6 && tx[0] > 0 && tx[3] < 0;
+        Math.abs(tx[1]) < 1e-6 &&
+        Math.abs(tx[2]) < 1e-6 &&
+        tx[0] > 0 &&
+        tx[3] < 0;
       const x = tx[4];
       const right = x + item.width * p.viewport.scale;
       const size = Math.abs(tx[3]);
       if (cur && !cur.text) {
-        Object.assign(cur, { last: i, text: true, flat, x, right, y: tx[5], size });
+        Object.assign(cur, {
+          last: i,
+          text: true,
+          flat,
+          x,
+          right,
+          y: tx[5],
+          size,
+        });
       } else if (
         cur &&
         cur.flat &&
@@ -670,7 +816,16 @@ class PDFHighlight extends Component<Props> {
         cur.last = i;
         cur.right = Math.max(cur.right, right);
       } else {
-        out.push({ first: i, last: i, text: true, flat, x, right, y: tx[5], size });
+        out.push({
+          first: i,
+          last: i,
+          text: true,
+          flat,
+          x,
+          right,
+          y: tx[5],
+          size,
+        });
       }
     });
     return out;
@@ -712,31 +867,42 @@ class PDFHighlight extends Component<Props> {
   };
 
   // Lays a paragraph out again from its first replaced line, like typed text:
-  // words wrap at the column edge and justified text stays justified. Returns
-  // nothing when the text needs more lines than the paragraph has.
+  // words wrap at the column edge and justified text stays justified. Lines
+  // beyond the paragraph's own are added below it and push the page down.
   private flow = (
     p: Paint,
     para: Segment[],
     mine: ReplaceSlice[],
     segs: Segment[],
-    at: Map<Contents, number>
+    at: Map<Contents, number>,
   ): Flow | undefined => {
     const { ctx, tc } = p;
     const items = tc.items;
     const size = para[0].size;
     const left = para.reduce((m, s) => Math.min(m, s.x), Infinity);
     // The column's right edge, also judged from other lines of the column.
-    const right = segs
+    const columnRight = segs
       .filter(
         (s) =>
           s.flat &&
           s.text &&
           Math.abs(s.x - left) <= size * 3 &&
-          Math.abs(s.size - size) <= size * 0.1
+          Math.abs(s.size - size) <= size * 0.1,
       )
       .reduce((m, s) => Math.max(m, s.right), 0);
+    const beside = segs.filter(
+      (s) =>
+        !para.includes(s) &&
+        s.text &&
+        s.y > para[0].y - size &&
+        s.y < para[para.length - 1].y + size,
+    );
+    const right = beside
+      .filter((s) => s.x > left + size)
+      .reduce((m, s) => Math.min(m, s.x - size * 0.5), columnRight);
     const justified =
-      para.length > 1 && para.slice(0, -1).every((s) => s.right >= right - s.size);
+      para.length > 1 &&
+      para.slice(0, -1).every((s) => s.right >= right - s.size);
     const holds = (s: Segment) =>
       mine.some((r) => {
         const i = at.get(r.item) as number;
@@ -745,9 +911,16 @@ class PDFHighlight extends Component<Props> {
     const lines = para.slice(para.findIndex(holds));
 
     // The text from the first replaced line on, with the replacements in place.
-    type Part = { text: string; item: Contents; rule?: ReplaceText; w: number };
+    interface Part {
+      text: string;
+      item: Contents;
+      rule?: ReplaceText;
+      w: number;
+    }
     const pieces = new Map<Contents, ReplaceSlice[]>();
-    mine.forEach((r) => pieces.set(r.item, (pieces.get(r.item) || []).concat(r)));
+    mine.forEach((r) =>
+      pieces.set(r.item, (pieces.get(r.item) || []).concat(r)),
+    );
     const parts: Part[] = [];
     const add = (text: string, item: Contents, rule?: ReplaceText) =>
       parts.push({ text, item, rule, w: 0 });
@@ -771,7 +944,8 @@ class PDFHighlight extends Component<Props> {
     const boxes = new Map<Contents, Box>();
     const boxOf = (item: Contents) => {
       let b = boxes.get(item);
-      if (!b) boxes.set(item, (b = this.sliceBox(p, { item, start: 0, end: 0 })));
+      if (!b)
+        boxes.set(item, (b = this.sliceBox(p, { item, start: 0, end: 0 })));
       return b;
     };
     const words: Part[][] = [];
@@ -786,7 +960,11 @@ class PDFHighlight extends Component<Props> {
         if (!word) words.push((word = []));
         const b = boxOf(part.item);
         ctx.font = b.font;
-        word.push({ ...part, text: t, w: ctx.measureText(t).width + b.track * t.length });
+        word.push({
+          ...part,
+          text: t,
+          w: ctx.measureText(t).width + b.track * t.length,
+        });
       });
     });
     const widthOf = (w: Part[]) => w.reduce((n, part) => n + part.w, 0);
@@ -796,20 +974,43 @@ class PDFHighlight extends Component<Props> {
       space = ctx.measureText(" ").width;
     }
 
-    // Fill the original baselines greedily.
+    const column = segs.filter(
+      (s) =>
+        s.flat &&
+        s.text &&
+        Math.abs(s.size - size) <= size * 0.1 &&
+        s.right >= right - size * 3,
+    );
+    const margin = column.reduce(
+      (m, s) => Math.min(m, s.x),
+      lines[lines.length - 1].x,
+    );
+    const nextX =
+      lines.length > 1
+        ? lines[lines.length - 1].x
+        : Math.min(margin, lines[0].x);
+    const step = this.lineStep(segs, size, para);
+    const last = lines[lines.length - 1];
+    const lineAt = (n: number) =>
+      n < lines.length
+        ? lines[n]
+        : { x: nextX, y: last.y + (n - lines.length + 1) * step };
+
+    const fits = words.flatMap((w) =>
+      this.splitWord(p, w, right - nextX, boxOf),
+    );
+
     const rows: Part[][][] = [[]];
     let x = lines[0].x;
-    for (const w of words) {
+    for (const w of fits) {
       const wide = widthOf(w);
       let row = rows[rows.length - 1];
       if (row.length && x + space + wide > right) {
-        if (rows.length === lines.length) return undefined;
         rows.push((row = []));
-        x = lines[rows.length - 1].x;
+        x = lineAt(rows.length - 1).x;
       } else if (row.length) {
         x += space;
       }
-      if (x + wide > right + 0.5) return undefined; // a word wider than a line
       row.push(w);
       x += wide;
     }
@@ -829,14 +1030,38 @@ class PDFHighlight extends Component<Props> {
         rule: part.rule,
       };
     };
+    const centerOf = (s: { x: number; right: number }) => (s.x + s.right) / 2;
+    const above = segs
+      .filter(
+        (s) =>
+          s.flat &&
+          s.text &&
+          !para.includes(s) &&
+          s.y < lines[0].y - size * 0.5 &&
+          s.right > lines[0].x &&
+          s.x < lines[0].right,
+      )
+      .reduce<
+        Segment | undefined
+      >((m, s) => (!m || s.y > m.y ? s : m), undefined);
+    const centered =
+      lines.length > 1
+        ? lines.every(
+            (l) => Math.abs(centerOf(l) - centerOf(lines[0])) < size * 0.5,
+          ) && lines.some((l) => Math.abs(l.x - lines[0].x) > size * 0.5)
+        : !!above &&
+          Math.abs(centerOf(above) - centerOf(lines[0])) < size * 0.75 &&
+          Math.abs(above.x - lines[0].x) > size * 0.75;
+    const middle = centerOf(lines[0]);
     rows.forEach((row, n) => {
-      const line = lines[n];
-      const used = row.reduce((m, w) => m + widthOf(w), 0) + space * (row.length - 1);
+      const line = lineAt(n);
+      const used =
+        row.reduce((m, w) => m + widthOf(w), 0) + space * (row.length - 1);
       const gap =
-        justified && n < rows.length - 1 && row.length > 1
+        !centered && justified && n < rows.length - 1 && row.length > 1
           ? space + (right - line.x - used) / (row.length - 1)
           : space;
-      let cx = line.x;
+      let cx = centered ? middle - used / 2 : line.x;
       row.forEach((w, j) => {
         w.forEach((part) => {
           out.push(make(part, cx, line.y));
@@ -844,18 +1069,25 @@ class PDFHighlight extends Component<Props> {
         });
         if (j === row.length - 1) return;
         // Spaces are not drawn; they keep copied text readable.
-        out.push(make({ text: " ", item: w[w.length - 1].item, w: gap }, cx, line.y));
+        out.push(
+          make({ text: " ", item: w[w.length - 1].item, w: gap }, cx, line.y),
+        );
         cx += gap;
       });
     });
 
-    const cover = lines.map((s) => {
+    const metricsOf = (s: Segment) => {
       const first = items
         .slice(s.first, s.last + 1)
         .find((it) => !!it.str && !!it.str.trim()) as Contents;
       const style = tc.styles[first.fontName];
-      const asc = style && style.ascent > 0 ? style.ascent : 0.8;
-      const desc = style && style.descent < 0 ? style.descent : -0.2;
+      return {
+        asc: style && style.ascent > 0 ? style.ascent : 0.8,
+        desc: style && style.descent < 0 ? style.descent : -0.2,
+      };
+    };
+    const cover = lines.map((s) => {
+      const { asc, desc } = metricsOf(s);
       const pad = s.size * 0.05;
       return {
         x: s.x - pad,
@@ -864,19 +1096,104 @@ class PDFHighlight extends Component<Props> {
         h: (asc - desc) * s.size + 2 * pad,
       };
     });
+    const top = cover[0].y;
+    const bottom = cover[cover.length - 1].y + cover[cover.length - 1].h;
+    const extra = rows.length - lines.length;
+    const grow = extra > 0 || !beside.length ? extra * step : 0;
+    const x0 = beside.length ? Math.min(left, nextX) - size * 0.3 : -Infinity;
+    const x1 = beside.length ? right + size * 0.3 : Infinity;
+    const end = beside.length
+      ? segs
+          .filter(
+            (s) =>
+              s.text &&
+              s.y > last.y + size * 0.5 &&
+              ((s.x < x0 && s.right > x0 + size) ||
+                (s.x < x1 - size && s.right > x1)),
+          )
+          .reduce(
+            (m, s) => Math.min(m, s.y - metricsOf(s).asc * s.size - size * 0.2),
+            Infinity,
+          )
+      : bottom;
     return {
       first: lines[0].first,
-      last: lines[lines.length - 1].last,
+      last: last.last,
       items: out,
-      cover,
+      cover: grow < 0 ? cover.slice(0, rows.length) : cover,
       background: mine[0].rule.background,
+      top,
+      bottom,
+      end,
+      x0,
+      x1,
+      grow,
+      offset: 0,
     };
+  };
+
+  private lineStep = (segs: Segment[], size: number, para: Segment[]) => {
+    const own =
+      para.length > 1
+        ? (para[para.length - 1].y - para[0].y) / (para.length - 1)
+        : 0;
+    if (own) return own;
+    const gaps: number[] = [];
+    for (let i = 1; i < segs.length; i++) {
+      const a = segs[i - 1];
+      const b = segs[i];
+      if (!a.text || !b.text || Math.abs(a.size - size) > size * 0.1) continue;
+      if (Math.abs(b.size - size) > size * 0.1) continue;
+      const d = b.y - a.y;
+      if (d > size * 0.9 && d < size * 1.6) gaps.push(d);
+    }
+    if (!gaps.length) return size * 1.2;
+    gaps.sort((a, b) => a - b);
+    return gaps[Math.floor(gaps.length / 2)];
+  };
+
+  private splitWord = <T extends { text: string; item: Contents; w: number }>(
+    p: Paint,
+    word: T[],
+    max: number,
+    boxOf: (item: Contents) => Box,
+  ): T[][] => {
+    if (word.reduce((n, part) => n + part.w, 0) <= max) return [word];
+    const out: T[][] = [];
+    let cur: T[] = [];
+    let used = 0;
+    word.forEach((part) => {
+      const b = boxOf(part.item);
+      p.ctx.font = b.font;
+      let chunk = "";
+      let chunkW = 0;
+      Array.from(part.text).forEach((ch) => {
+        const w = p.ctx.measureText(ch).width + b.track;
+        if (used + chunkW + w > max && (cur.length || chunk)) {
+          if (chunk) cur.push({ ...part, text: chunk, w: chunkW });
+          out.push(cur);
+          cur = [];
+          used = 0;
+          chunk = "";
+          chunkW = 0;
+        }
+        chunk += ch;
+        chunkW += w;
+      });
+      if (chunk) {
+        cur.push({ ...part, text: chunk, w: chunkW });
+        used += chunkW;
+      }
+    });
+    if (cur.length) out.push(cur);
+    return out;
   };
 
   private drawFlow = (p: Paint, flow: Flow) => {
     const { ctx } = p;
     const { paper, ink } = this.colorsAt(p, flow.cover);
     ctx.save();
+    ctx.translate(0, flow.offset);
     ctx.fillStyle = flow.background || paper;
     flow.cover.forEach((r) => ctx.fillRect(r.x, r.y, r.w, r.h));
     ctx.textBaseline = "alphabetic";
@@ -891,7 +1208,7 @@ class PDFHighlight extends Component<Props> {
       ctx.fillStyle = (item.rule && item.rule.color) || ink;
       ctx.fillText(item.str, b.tx[4], b.tx[5]);
       ctx.restore();
-      if (!item.rule) {
+      if (!item.rule || item.rule.highlight === false) {
         run = undefined;
       } else {
         if (!run) marks.push((run = []));
@@ -906,7 +1223,7 @@ class PDFHighlight extends Component<Props> {
         ctx.translate(b.tx[4], b.tx[5]);
         this.mark(ctx, b.x0, b.y, b.w, b.h);
         ctx.restore();
-      })
+      }),
     );
     ctx.restore();
   };
@@ -916,8 +1233,14 @@ class PDFHighlight extends Component<Props> {
   private colorsAt = (p: Paint, rects: Rect[]): Colors => {
     const x0 = Math.max(0, Math.floor(Math.min(...rects.map((r) => r.x))));
     const y0 = Math.max(0, Math.floor(Math.min(...rects.map((r) => r.y))));
-    const x1 = Math.min(p.base.width, Math.ceil(Math.max(...rects.map((r) => r.x + r.w))));
-    const y1 = Math.min(p.base.height, Math.ceil(Math.max(...rects.map((r) => r.y + r.h))));
+    const x1 = Math.min(
+      p.base.width,
+      Math.ceil(Math.max(...rects.map((r) => r.x + r.w))),
+    );
+    const y1 = Math.min(
+      p.base.height,
+      Math.ceil(Math.max(...rects.map((r) => r.y + r.h))),
+    );
     const key = [x0, y0, x1, y1].join();
     let colors = p.colors.get(key);
     if (colors) return colors;
@@ -927,7 +1250,7 @@ class PDFHighlight extends Component<Props> {
       if (ctx && x1 > x0 && y1 > y0) {
         const { data } = ctx.getImageData(x0, y0, x1 - x0, y1 - y0);
         const counts = new Map<number, number>();
-        let paper = 0xffffff;
+        let paper = 2 ** 24 - 1;
         let most = 0;
         for (let i = 0; i < data.length; i += 8) {
           const c = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
@@ -939,7 +1262,10 @@ class PDFHighlight extends Component<Props> {
           }
         }
         const diff = (c: number) =>
-          [16, 8, 0].reduce((d, s) => d + Math.abs(((c >> s) & 255) - ((paper >> s) & 255)), 0);
+          [16, 8, 0].reduce(
+            (d, s) => d + Math.abs(((c >> s) & 255) - ((paper >> s) & 255)),
+            0,
+          );
         let ink = paper;
         counts.forEach((_, c) => {
           if (diff(c) > diff(ink)) ink = c;
@@ -964,7 +1290,7 @@ class PDFHighlight extends Component<Props> {
       [b.y, b.y + b.h].forEach((v) => {
         xs.push(b.tx[4] + u * cos - v * sin);
         ys.push(b.tx[5] + u * sin + v * cos);
-      })
+      }),
     );
     const x = Math.min(...xs);
     const y = Math.min(...ys);
@@ -981,11 +1307,22 @@ class PDFHighlight extends Component<Props> {
     const font =
       objs && objs.has(item.fontName) ? objs.get(item.fontName) : undefined;
     if (!font) return `${size}px "${item.fontName}", ${fallback}`;
-    const weight = font.black ? "900" : font.bold ? "bold" : "normal";
-    const italic = font.italic ? "italic" : "normal";
+    const name = String(font.name || "");
+    const weight = font.black
+      ? "900"
+      : font.bold || /bold/i.test(name)
+        ? "bold"
+        : "normal";
+    const italic =
+      font.italic || /italic|oblique/i.test(name) ? "italic" : "normal";
+    const system = systemFamilyOf(name);
+    const generic =
+      system && SERIF_FAMILY.test(system)
+        ? "serif"
+        : font.fallbackName || fallback;
     const family =
       (font.systemFontInfo && font.systemFontInfo.css) ||
-      `"${font.loadedName}", ${font.fallbackName || fallback}`;
+      (system ? `"${system}", ${generic}` : `"${font.loadedName}", ${generic}`);
     return `${italic} ${weight} ${size}px ${family}`;
   };
 
@@ -1088,7 +1425,7 @@ class PDFHighlight extends Component<Props> {
     p: Paint,
     part: ReplaceSlice,
     start: number,
-    end: number
+    end: number,
   ): Box => {
     const { ctx } = p;
     const b = this.lineBox(p, part.line);
@@ -1100,10 +1437,19 @@ class PDFHighlight extends Component<Props> {
     return { ...b, x0, w: x1 - x0 };
   };
 
-  private drawReplacements = (p: Paint, parts: ReplaceSlice[], page: number) => {
+  private drawReplacements = (
+    p: Paint,
+    parts: ReplaceSlice[],
+    page: number,
+  ) => {
     const { ctx } = p;
     if (this.props.debug && parts.length) {
-      console.info("[PDFHighlight] page", page, "replaced slices", parts.length);
+      console.info(
+        "[PDFHighlight] page",
+        page,
+        "replaced slices",
+        parts.length,
+      );
     }
     parts.forEach((part) => {
       if (part !== part.line[0]) return; // drawn once per visual line
@@ -1111,7 +1457,7 @@ class PDFHighlight extends Component<Props> {
       const b = this.lineBox(p, part.line);
       const pad = b.h * 0.05; // hide anti-aliased edges of the original glyphs
       const { paper, ink } = this.colorsAt(p, [this.rectOf(b)]);
-      ctx.translate(b.tx[4], b.tx[5]);
+      ctx.translate(b.tx[4], b.tx[5] + p.dyAt(b.tx[4], b.tx[5]));
       ctx.rotate(b.angle);
       ctx.fillStyle = part.rule.background || paper;
       ctx.fillRect(b.x0 - pad, b.y - pad, b.w + 2 * pad, b.h + 2 * pad);
@@ -1127,7 +1473,9 @@ class PDFHighlight extends Component<Props> {
         ctx.fillText(part.text, 0, 0);
         ctx.restore();
         // Replaced text is marked like a keyword match.
-        this.mark(ctx, b.x0, b.y, ctx.measureText(part.text).width * k, b.h);
+        if (part.rule.highlight !== false) {
+          this.mark(ctx, b.x0, b.y, ctx.measureText(part.text).width * k, b.h);
+        }
       }
       ctx.restore();
     });
@@ -1140,9 +1488,11 @@ class PDFHighlight extends Component<Props> {
     x: number,
     y: number,
     w: number,
-    h: number
+    h: number,
+    color?: string,
   ) => {
-    const { colorHighlight = "yellow", isBorderHighlight } = this.props;
+    const { isBorderHighlight } = this.props;
+    const colorHighlight = color || this.props.colorHighlight || "yellow";
     ctx.save();
     if (isBorderHighlight) {
       ctx.strokeStyle = colorHighlight;
@@ -1163,12 +1513,19 @@ class PDFHighlight extends Component<Props> {
     const { replaceTexts = [], specialWordRemoves = [] } = this.props;
     const out: ReplaceSlice[] = [];
     const taken = new Uint8Array(index.text.length);
-    const size = (line: Slice[]) => line.reduce((n, s) => n + s.end - s.start, 0);
+    const size = (line: Slice[]) =>
+      line.reduce((n, s) => n + s.end - s.start, 0);
     replaceTexts.forEach((rule) => {
-      const needle = this.normalizeNeedle(rule.search, specialWordRemoves, Infinity);
+      const needle = this.normalizeNeedle(
+        rule.search,
+        specialWordRemoves,
+        Infinity,
+      );
       const text = rule.replace || "";
       this.findAll(index, needle).forEach(([from, to]) => {
-        for (let i = from; i < to; i++) if (taken[i]) return;
+        for (let i = from; i < to; i++) {
+          if (taken[i]) return;
+        }
         taken.fill(1, from, to);
         const lines = this.lines(this.slices(index, from, to));
         const total = lines.reduce((n, l) => n + size(l), 0);
@@ -1229,14 +1586,20 @@ class PDFHighlight extends Component<Props> {
     const needles = Array.from(
       new Set(
         keywords.map((k) =>
-          this.normalizeNeedle(k, specialWordRemoves, maxKeywordLength)
-        )
-      )
+          this.normalizeNeedle(k, specialWordRemoves, maxKeywordLength),
+        ),
+      ),
     ).filter(Boolean); // drops whitespace-only keywords
     for (const needle of needles) {
-      const matches = this.findAll(index, needle);
+      const matches = this.findAll(index, needle, this.props.ignoreCase);
       if (debug) {
-        console.info("[PDFHighlight] page", page, "matches", matches.length, needle);
+        console.info(
+          "[PDFHighlight] page",
+          page,
+          "matches",
+          matches.length,
+          needle,
+        );
       }
       for (const [from, to] of matches) {
         for (const line of this.lines(this.slices(index, from, to))) {
@@ -1244,13 +1607,14 @@ class PDFHighlight extends Component<Props> {
             line.map((s) =>
               s.rep < 0
                 ? this.sliceBox(p, s)
-                : this.replacedBox(p, index.reps[s.rep], s.start, s.end)
-            )
+                : this.replacedBox(p, index.reps[s.rep], s.start, s.end),
+            ),
           );
+          const dy = (line[0].item as Item).dy ?? p.dyAt(b.tx[4], b.tx[5]);
           ctx.save();
-          ctx.translate(b.tx[4], b.tx[5]);
+          ctx.translate(b.tx[4], b.tx[5] + dy);
           ctx.rotate(b.angle);
-          this.mark(ctx, b.x0, b.y, b.w, b.h);
+          this.mark(ctx, b.x0, b.y, b.w, b.h, this.props.colorKeyword);
           ctx.restore();
         }
       }
@@ -1263,7 +1627,7 @@ class PDFHighlight extends Component<Props> {
   private buildIndex = (
     items: Contents[],
     removes: string[],
-    reps: ReplaceSlice[] = []
+    reps: ReplaceSlice[] = [],
   ): PageIndex => {
     const chars: string[] = [];
     const item: number[] = [];
@@ -1285,7 +1649,9 @@ class PDFHighlight extends Component<Props> {
       }
     };
     const repsOf = new Map<Contents, number[]>();
-    reps.forEach((r, n) => repsOf.set(r.item, (repsOf.get(r.item) || []).concat(n)));
+    reps.forEach((r, n) =>
+      repsOf.set(r.item, (repsOf.get(r.item) || []).concat(n)),
+    );
     items.forEach((it, i) => {
       const s = clean(it.str || "");
       let pos = 0;
@@ -1302,7 +1668,11 @@ class PDFHighlight extends Component<Props> {
     return { text: chars.join(""), item, off, rep, items, reps };
   };
 
-  private normalizeNeedle = (keyword: string, removes: string[], max: number) => {
+  private normalizeNeedle = (
+    keyword: string,
+    removes: string[],
+    max: number,
+  ) => {
     let k = keyword || "";
     removes.forEach((r) => {
       if (r) k = k.split(r).join(" ");
@@ -1310,13 +1680,20 @@ class PDFHighlight extends Component<Props> {
     return k.replace(/\s+/g, "").slice(0, max || 2000);
   };
 
-  private findAll = (idx: PageIndex, needle: string): [number, number][] => {
+  private findAll = (
+    idx: PageIndex,
+    needle: string,
+    ignoreCase?: boolean,
+  ): [number, number][] => {
     const out: [number, number][] = [];
     if (!needle) return out;
-    let p = idx.text.indexOf(needle);
+    const text = ignoreCase ? idx.text.toLocaleLowerCase("vi") : idx.text;
+    const find = ignoreCase ? needle.toLocaleLowerCase("vi") : needle;
+    if (text.length !== idx.text.length) return this.findAll(idx, needle);
+    let p = text.indexOf(find);
     while (p !== -1) {
-      out.push([p, p + needle.length]);
-      p = idx.text.indexOf(needle, p + needle.length);
+      out.push([p, p + find.length]);
+      p = text.indexOf(find, p + find.length);
     }
     return out;
   };
@@ -1330,10 +1707,19 @@ class PDFHighlight extends Component<Props> {
       const i = idx.item[k];
       const r = idx.rep[k];
       let last = k;
-      while (last + 1 < to && idx.item[last + 1] === i && idx.rep[last + 1] === r) {
+      while (
+        last + 1 < to &&
+        idx.item[last + 1] === i &&
+        idx.rep[last + 1] === r
+      ) {
         last++;
       }
-      out.push({ item: idx.items[i], start: idx.off[k], end: idx.off[last] + 1, rep: r });
+      out.push({
+        item: idx.items[i],
+        start: idx.off[k],
+        end: idx.off[last] + 1,
+        rep: r,
+      });
       k = last + 1;
     }
     return out;

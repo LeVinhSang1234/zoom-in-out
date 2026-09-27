@@ -5,6 +5,7 @@ declare module "@pdf-highlight/react-pdf-highlight" {
     replace: string; // Text drawn instead; "" only covers the original
     color?: string; // Text color, default: the page's ink color
     background?: string; // Color covering the original glyphs, default: the page's paper color
+    highlight?: boolean; // false: do not mark the replaced text like a keyword match. Default true
   };
   type Props = {
     url?: string; // pdf file path
@@ -16,13 +17,15 @@ declare module "@pdf-highlight/react-pdf-highlight" {
     onStartLoad?: (error?: any) => void; // Called when a document (re)load or a full re-render starts. Keyword / highlight / replaceTexts changes only repaint the overlay and do not trigger it.
     keywords?: string[]; // Words or phrases to highlight. Every occurrence is highlighted; matching ignores whitespace and line breaks and uses the displayed text (after replaceTexts).
     colorHighlight?: string; // Highlight color, applied to the background or to the border (isBorderHighlight). Default "yellow"
+    colorKeyword?: string; // Highlight color for keyword matches only; replaced text keeps colorHighlight. Default colorHighlight
+    ignoreCase?: boolean; // Match keywords case-insensitively. Default false
     isBorderHighlight?: boolean; // Draws a border around matches instead of a translucent background.
     styleWrap?: CSSProperties; // Styles for the wrapper element that contains the pages.
     debug?: boolean; // Logs the number of matches / replaced slices per page and page render errors to the console.
     allowHtml?: boolean; // Adds a transparent, selectable text layer over each page so text can be selected and copied. Default = false
     specialWordRemoves?: string[]; // Strings ignored when matching keywords and replaceTexts (e.g. ["-"] to match across hyphenated line breaks).
     maxKeywordLength?: number; // Maximum number of characters (whitespace excluded) of each keyword that is matched. Default = 2000
-    replaceTexts?: ReplaceText[]; // Replaces text on screen and marks it like a keyword match. A longer replacement is flowed into its paragraph like typed text; only when the paragraph has no line left is it scaled down. Display only: the PDF file itself is not modified, so do not use it for redaction.
+    replaceTexts?: ReplaceText[]; // Replaces text on screen and marks it like a keyword match. The paragraph is flowed again like edited text: a longer replacement pushes the following words on (adding lines below the paragraph and moving the rest of the page down when needed), a shorter one pulls them back. Display only: the PDF file itself is not modified, so do not use it for redaction.
     pdfjs?: any; // Your own pdf.js, e.g. `import * as pdfjs from "pdfjs-dist"`. Without it a global pdfjsLib is reused, and only otherwise pdf.js 3.11.174 is loaded from cdnjs.
   };
 
