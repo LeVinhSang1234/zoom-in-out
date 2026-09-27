@@ -1,22 +1,28 @@
 declare module "@pdf-highlight/react-pdf-highlight" {
   import { Component, CSSProperties } from "react";
+  export type ReplaceText = {
+    search: string; // Text to find (matching ignores whitespace and line breaks, like keywords)
+    replace: string; // Text drawn instead; "" only covers the original
+    color?: string; // Text color, default "#000"
+    background?: string; // Color covering the original glyphs, default "#fff"
+  };
   type Props = {
     url?: string; // pdf file path
     width?: number | string; // The width specifies the horizontal size for rendering the PDF,
-    scale?: number; // The scale controls the zoom level of the PDF when rendering, adjusting its size larger or smaller,
-    page?: number; //The page refers to the specific page of the PDF to render. If not provided, all pages of the PDF will be rendered.
+    scale?: number; // Minimum render scale; pages are rasterized at the container width x devicePixelRatio when that is larger,
+    page?: number; //The page refers to the specific page of the PDF to render. If not provided, all pages of the PDF will be rendered (lazily, as they scroll into view).
     pageSearch?: number; // The pageSearch refers to the specific page of the PDF where the search will be performed. If not provided, the search will be conducted across all pages.,
-    onLoaded?: (error?: any) => void;
-    onStartLoad?: (error?: any) => void;
-    keywords?: string[]; // The keywords parameter is a list (array) of words or phrases that you want to search for within a PDF document. These keywords are used to locate specific text within the PDF and highlight them based on the options you've configured (e.g., border or background highlighting),
-    colorHighlight?: string; // is a parameter that defines the color used for highlighting keywords in a PDF. It allows you to specify the color of the highlight, which can be either applied to the border (if isBorderHighlight is enabled) or to the background (if isBorderHighlight is disabled).,
-    isBorderHighlight?: boolean; // is a flag that allows highlighting keywords by drawing a border around them, instead of changing the background color. This can be useful when you want to visually emphasize the keywords without altering the background style, which can be especially useful for readability or design consistency.,
-    styleWrap?: CSSProperties; // Is a parameter or property that allows customization of the styles applied to the parent wrapper element that contains the canvas rendering the PDF content.,
-    debug?: boolean; // Is a parameter or flag used to display each step of the search process, providing detailed insights into how results are being generated. It helps developers understand and troubleshoot issues during keyword searching,
-    allowHtml?: boolean; // is a parameter or flag that enables rendering and displaying HTML content within the PDF output instead of limiting it to canvas-based rendering. Default = false
-    extractLetterSpacing?: number; // Is a parameter that allows you to configure the letter spacing to improve the accuracy of keyword searches within a PDF file,
-    specialWordRemoves?: string[]; // Is an array that specifies which special characters should be removed from a given string or input.,
-    maxKeywordLength?: number; //The maxKeywordLength is used to limit the number of characters in each keyword. To optimize, you can split long keywords in the keywords array into smaller keywords based on the maxKeywordLength limit.
+    onLoaded?: (error?: any) => void; // Called once the pages currently in view are drawn. Receives the error when loading or rendering fails.
+    onStartLoad?: (error?: any) => void; // Called when a document (re)load or a full re-render starts. Keyword / highlight / replaceTexts changes only repaint the overlay and do not trigger it.
+    keywords?: string[]; // Words or phrases to highlight. Every occurrence is highlighted; matching ignores whitespace and line breaks and uses the displayed text (after replaceTexts).
+    colorHighlight?: string; // Highlight color, applied to the background or to the border (isBorderHighlight). Default "yellow"
+    isBorderHighlight?: boolean; // Draws a border around matches instead of a translucent background.
+    styleWrap?: CSSProperties; // Styles for the wrapper element that contains the pages.
+    debug?: boolean; // Logs the number of matches / replaced slices per page and page render errors to the console.
+    allowHtml?: boolean; // Adds a transparent, selectable text layer over each page so text can be selected and copied. Default = false
+    specialWordRemoves?: string[]; // Strings ignored when matching keywords and replaceTexts (e.g. ["-"] to match across hyphenated line breaks).
+    maxKeywordLength?: number; // Maximum number of characters (whitespace excluded) of each keyword that is matched. Default = 2000
+    replaceTexts?: ReplaceText[]; // Replaces text on screen and marks it like a keyword match. Display only: the PDF file itself is not modified, so do not use it for redaction.
   };
 
   export class PDFHighlight extends Component<Props> {}

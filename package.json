@@ -1,6 +1,6 @@
 {
   "name": "@pdf-highlight/react-pdf-highlight",
-  "version": "1.2.4",
+  "version": "2.0.0",
   "private": false,
   "license": "UNLICENSED",
   "description": "react pdf highlight keyword",
@@ -9,6 +9,9 @@
   "author": "SangLv <lsang2884@gmail.com>",
   "homepage": "https://github.com/LeVinhSang1234/zoom-in-out/tree/feature/hightlight-pdf",
   "dependencies": {},
+  "peerDependencies": {
+    "react": ">=16.14.0"
+  },
   "scripts": {},
   "files": [
     "lib"

@@ -13,8 +13,13 @@ const config = {
       strict: false,
     },
   ],
-  plugins: [typescript({ target: "es5" })],
-  external: ["react", "react-dom"],
+  plugins: [
+    typescript({
+      target: "es5",
+      include: ["*.ts", "*.tsx", "**/*.ts", "**/*.tsx"],
+    }),
+  ],
+  external: ["react", "react-dom", "react/jsx-runtime"],
 };
 
 export default config;

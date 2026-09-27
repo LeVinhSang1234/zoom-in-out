@@ -7,17 +7,17 @@ type Props = {
   scale?: number // The scale controls the zoom level of the PDF when rendering, adjusting its size larger or smaller,
   page?: number //The page refers to the specific page of the PDF to render. If not provided, all pages of the PDF will be rendered.
   pageSearch?: number // The pageSearch refers to the specific page of the PDF where the search will be performed. If not provided, the search will be conducted across all pages.,
-  onLoaded?: (error?: any) => void,
-  onStartLoad?: (error?: any) => void,
+  onLoaded?: (error?: any) => void, // Called once the pages currently in view are drawn (pages further down render lazily while scrolling). Receives the error when loading or rendering fails.
+  onStartLoad?: (error?: any) => void, // Called when a document (re)load or a full re-render starts. Keyword / highlight / replaceTexts changes only repaint the overlay and do not trigger it.
   keywords?: string[] // The keywords parameter is a list (array) of words or phrases that you want to search for within a PDF document. These keywords are used to locate specific text within the PDF and highlight them based on the options you've configured (e.g., border or background highlighting),
   colorHighlight?: string // is a parameter that defines the color used for highlighting keywords in a PDF. It allows you to specify the color of the highlight, which can be either applied to the border (if isBorderHighlight is enabled) or to the background (if isBorderHighlight is disabled).,
   isBorderHighlight?: boolean // is a flag that allows highlighting keywords by drawing a border around them, instead of changing the background color. This can be useful when you want to visually emphasize the keywords without altering the background style, which can be especially useful for readability or design consistency.,
   styleWrap?: CSSProperties // Is a parameter or property that allows customization of the styles applied to the parent wrapper element that contains the canvas rendering the PDF content.,
-  debug?: boolean // Is a parameter or flag used to display each step of the search process, providing detailed insights into how results are being generated. It helps developers understand and troubleshoot issues during keyword searching,
-  allowHtml?: boolean, // is a parameter or flag that enables rendering and displaying HTML content within the PDF output instead of limiting it to canvas-based rendering. Default = false
-  extractLetterSpacing?: number // Is a parameter that allows you to configure the letter spacing to improve the accuracy of keyword searches within a PDF file,
-  specialWordRemoves?: string[] // Is an array that specifies which special characters should be removed from a given string or input.,
-  maxKeywordLength?: number, //The maxKeywordLength is used to limit the number of characters in each keyword. To optimize, you can split long keywords in the keywords array into smaller keywords based on the maxKeywordLength limit.
+  debug?: boolean // Logs the number of matches / replaced slices per page and page render errors to the console,
+  allowHtml?: boolean, // Adds a transparent, selectable text layer over each page so text can be selected and copied. Default = false
+  specialWordRemoves?: string[] // Strings ignored when matching keywords and replaceTexts (e.g. ["-"] to match across hyphenated line breaks). Matching already ignores all whitespace and line breaks,
+  maxKeywordLength?: number, // Maximum number of characters (whitespace excluded) of each keyword that is matched. Default = 2000
+  replaceTexts?: { search: string; replace: string; color?: string; background?: string }[], // Replaces text on screen: every occurrence of `search` is covered with `background` (default "#fff"), `replace` is drawn in `color` (default "#000") and marked like a keyword match (colorHighlight / isBorderHighlight). `keywords` match the displayed text, i.e. after replacement. Display only — the PDF file itself is not modified, so do not use it for redaction.
 };
 
 import { PDFHighlight } from "@pdf-highlight/react-pdf-highlight";
@@ -34,6 +34,7 @@ function App() {
       keywords={[
         `facilisis odio sed mi.\nCurabitur suscipit. Nullam vel nisi. Etiam semper ipsum ut lectus. Proin aliquam, erat eget\npharetra commodo, eros mi condimentum quam,`,
       ]}
+      replaceTexts={[{ search: "Lorem ipsum", replace: "Hello world" }]}
       url="https://pdfobject.com/pdf/sample.pdf"
     />
   );

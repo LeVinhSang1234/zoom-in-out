@@ -10,6 +10,13 @@ type Contents = {
   hasEOL: boolean;
 };
 
+export type ReplaceText = {
+  search: string;
+  replace: string;
+  color?: string; // text color, default "#000"
+  background?: string; // covers the original glyphs, default "#fff"
+};
+
 type Props = {
   url?: string;
   width?: number | string;
@@ -24,19 +31,58 @@ type Props = {
   styleWrap?: CSSProperties;
   debug?: boolean;
   allowHtml?: boolean;
-  extractLetterSpacing?: number;
   specialWordRemoves?: string[];
   maxKeywordLength?: number;
+  // Display-only: the PDF file and pdf.js text extraction keep the original.
+  replaceTexts?: ReplaceText[];
 };
 
-type ValueFindObject = {
-  objects: Contents[];
-  begin: number;
-  end: number;
-  matching: string;
+type TextStyle = { fontFamily: string; ascent: number; descent: number };
+type TextContent = { items: Contents[]; styles: Record<string, TextStyle> };
+type PageEntry = {
+  pagePdf: any;
+  div: HTMLDivElement;
+  base: HTMLCanvasElement;
+  hl: HTMLCanvasElement;
+  viewport: any;
+  vp1: any;
+  task?: any;
+  textLayer?: HTMLDivElement;
 };
-
-const __DEV__ = !process.env.NODE_ENV || process.env.NODE_ENV === "development";
+type PageIndex = {
+  text: string;
+  item: number[];
+  off: number[];
+  rep: number[]; // -1 for PDF text, else the index into reps
+  items: Contents[];
+  reps: ReplaceSlice[];
+};
+type Slice = { item: Contents; start: number; end: number };
+// A replaced piece of one item. The replacement text for a whole visual line
+// sits on the line's first piece; `line` lists every piece of that line.
+type ReplaceSlice = Slice & {
+  text: string;
+  rule: ReplaceText;
+  line: ReplaceSlice[];
+};
+// A text box in canvas px, relative to the baseline origin tx[4], tx[5] and
+// rotated by `angle`; `font`/`track` reproduce how the PDF sets that text.
+type Box = {
+  tx: number[];
+  angle: number;
+  x0: number;
+  w: number;
+  y: number;
+  h: number;
+  font: string;
+  track: number;
+};
+type Paint = {
+  ctx: CanvasRenderingContext2D;
+  tc: TextContent;
+  viewport: any;
+  pagePdf: any;
+};
 
 const DEFAULT_CDN_PDFJS =
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
@@ -47,571 +93,851 @@ const DEFAULT_CDN_WORKER =
 const DEFAULT_INTEGRITY =
   "sha512-q+4liFwdPC/bNdhUpZx6aXDx/h77yEQtn4I1slHydcbZK34nLaR3cAeYSJshoxIOq3mjEf7xJE8YWIUHMn+oCQ==";
 
+// cdnjs does not serve the cmaps; needed for CJK PDFs using predefined CMaps.
+const CMAP_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/";
+
+const MAX_CANVAS_PIXELS = 8e6; // iOS Safari caps a canvas at 16.7M px
+const MAX_CONCURRENT_RENDERS = 2;
+// Pages within one viewport above/below the visible area get rendered; pages
+// that leave this band release their canvases.
+const RENDER_MARGIN = "100% 0px";
+
+// Props that only change the highlight overlay (no re-rasterization).
+const HIGHLIGHT_KEYS: (keyof Props)[] = [
+  "keywords",
+  "colorHighlight",
+  "isBorderHighlight",
+  "pageSearch",
+  "specialWordRemoves",
+  "maxKeywordLength",
+  "replaceTexts",
+];
+// Props that change the page bitmaps.
+const RASTER_KEYS: (keyof Props)[] = ["scale", "page", "allowHtml"];
+
+const sameShallow = (a: any, b: any): boolean =>
+  a === b ||
+  (!!a &&
+    !!b &&
+    typeof a === "object" &&
+    typeof b === "object" &&
+    Object.keys(a).length === Object.keys(b).length &&
+    Object.keys(a).every((k) => a[k] === b[k]));
+
+// Arrays compare by content (inline literals like replaceTexts={[{...}]} are
+// new objects on every parent render).
+const sameValue = (a: any, b: any): boolean =>
+  a === b ||
+  (Array.isArray(a) &&
+    Array.isArray(b) &&
+    a.length === b.length &&
+    a.every((x, i) => sameShallow(x, b[i])));
+
+// One shared <script> for every instance; rejects (and allows a retry) on error.
+let pdfjsPromise: Promise<any> | undefined;
+const loadPdfJs = (): Promise<any> =>
+  (pdfjsPromise ??= new Promise((res, rej) => {
+    const g = window.globalThis as any;
+    const ready = () => {
+      const lib = g.pdfjsLib;
+      if (!lib) return rej(new Error("pdf.js loaded but pdfjsLib is missing"));
+      if (!lib.GlobalWorkerOptions.workerSrc) {
+        lib.GlobalWorkerOptions.workerSrc = DEFAULT_CDN_WORKER;
+      }
+      res(lib);
+    };
+    if (g.pdfjsLib) return ready();
+    const script = document.createElement("script");
+    script.src = DEFAULT_CDN_PDFJS;
+    script.crossOrigin = "anonymous";
+    script.integrity = DEFAULT_INTEGRITY;
+    script.referrerPolicy = "no-referrer";
+    script.onload = ready;
+    script.onerror = () => {
+      script.remove();
+      pdfjsPromise = undefined;
+      rej(new Error("Failed to load pdf.js from " + DEFAULT_CDN_PDFJS));
+    };
+    document.head.appendChild(script);
+  }));
+
 class PDFHighlight extends Component<Props> {
-  private remove?: () => void;
   private pdf?: any;
+  private loadingTask?: any;
   private refCanvasWrap?: HTMLDivElement | null;
-  private removeResize?: () => void;
-  private timeoutRender?: NodeJS.Timeout;
+  private resizeObserver?: ResizeObserver;
+  private observer?: IntersectionObserver;
+  private timeoutRender?: ReturnType<typeof setTimeout>;
+  private loadReq = 0;
+  private renderGen = 0;
+  private paintGen = 0;
+  private unmounted = false;
+  private renderedWidth = 0;
+  private slots = new Map<number, HTMLDivElement>(); // placeholder per page
+  private visible = new Set<number>(); // pages inside RENDER_MARGIN
+  private active = new Set<number>(); // pages with a render in flight
+  private pages = new Map<number, PageEntry>(); // pages that have canvases
+  private textCache = new Map<number, Promise<TextContent>>();
+  private onIdle?: (error?: any) => void;
+  private pageError?: any;
 
   componentDidMount(): void {
-    const { onStartLoad } = this.props;
-    onStartLoad?.();
-    this.appendScript();
-    window.addEventListener("resize", this.loadResize);
-    this.removeResize = () => {
-      window.removeEventListener("resize", this.loadResize);
-    };
+    this.unmounted = false; // StrictMode re-mounts the same instance
+    this.startLoad();
+    const wrap = this.refCanvasWrap;
+    if (wrap && typeof ResizeObserver !== "undefined") {
+      this.resizeObserver = new ResizeObserver(this.loadResize);
+      this.resizeObserver.observe(wrap);
+    } else {
+      window.addEventListener("resize", this.loadResize);
+    }
   }
 
-  private isObjectEqual = (obj1: any, obj2: any) => {
-    if (obj1 === obj2) return true;
-    if (typeof obj1 !== typeof obj2) return false;
-    const obj1Keys = Object.keys(obj1);
-    const obj2Keys = Object.keys(obj2);
-    if (obj1Keys.length !== obj2Keys.length) {
-      return false;
-    }
-    let isEqual = true;
-    for (let key of obj1Keys) {
-      if (obj1[key] !== obj2[key]) {
-        isEqual = false;
-        break;
+  componentDidUpdate(prev: Props): void {
+    const p = this.props;
+    const changed = (keys: (keyof Props)[]) =>
+      keys.some((k) => !sameValue(prev[k], p[k]));
+    if (prev.url !== p.url) {
+      this.startLoad();
+    } else if (changed(RASTER_KEYS)) {
+      if (this.pdf) {
+        p.onStartLoad?.();
+        this.renderPage();
+      }
+    } else if (changed(HIGHLIGHT_KEYS)) {
+      this.repaintHighlights();
+      if (p.allowHtml && changed(["replaceTexts", "specialWordRemoves"])) {
+        this.pages.forEach((entry, page) => {
+          this.appendTextToCanvas(entry, page).catch(() => undefined);
+        });
       }
     }
-    return isEqual;
-  };
-
-  private isEqualKeyword = (keywords?: string[], keywords2?: string[]) => {
-    if (keywords === keywords2) return true;
-    if (keywords?.length !== keywords2?.length) return false;
-    if (keywords2?.some((e) => !keywords?.includes(e))) return false;
-    return true;
-  };
-
-  shouldComponentUpdate(nProps: Props): boolean {
-    const { width, keywords, onStartLoad, styleWrap, debug, url } = this.props;
-    const keys: (keyof Props)[] = [
-      "scale",
-      "page",
-      "pageSearch",
-      "isBorderHighlight",
-      "colorHighlight",
-    ];
-    if (url !== nProps.url) {
-      if (debug && __DEV__) {
-        console.info(
-          "Reload key change => ",
-          keys.find((key) => this.props[key] !== nProps[key])
-        );
-      }
-      onStartLoad?.();
-      this.loadPDf(nProps).then(() => this.renderPage(nProps));
-    } else if (
-      !this.isEqualKeyword(nProps.keywords, keywords) ||
-      !this.isObjectEqual(styleWrap, nProps.styleWrap) ||
-      keys.some((key) => this.props[key] !== nProps[key])
-    ) {
-      if (debug && __DEV__) {
-        console.info(
-          "Reload keyword or style => ",
-          "keyword ? ",
-          this.isEqualKeyword(nProps.keywords, keywords),
-          ", styleWrap ? ",
-          this.isObjectEqual(styleWrap, nProps.styleWrap)
-        );
-      }
-      onStartLoad?.();
-      this.renderPage(nProps);
-    }
-    return width !== nProps.width;
+    // width / styleWrap are CSS only; the ResizeObserver re-rasterizes if needed.
   }
 
   componentWillUnmount(): void {
-    this.remove?.();
-    this.removeResize?.();
+    this.unmounted = true;
+    ++this.loadReq;
+    if (this.timeoutRender) clearTimeout(this.timeoutRender);
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = undefined;
+    window.removeEventListener("resize", this.loadResize);
+    this.releaseDocument();
+    // The pdf.js <script> stays: other and future instances reuse it.
   }
 
-  private appendScript = async (props = this.props) => {
-    let head = document.querySelector("head");
-    const cdn = DEFAULT_CDN_PDFJS;
-    if (!head) {
-      head = document.createElement("head");
-      document.querySelector("html")?.appendChild(head);
+  private startLoad = () => {
+    const { url, onStartLoad, onLoaded } = this.props;
+    if (!url) {
+      this.loadPDf().catch(() => undefined); // only releases the old document
+      return;
     }
-    if (!head) return;
-    if (document.querySelector(`script[src="${cdn}"]`)) {
-      return this.pdfLoaded();
-    }
-    const script = document.createElement("script");
-    script.src = cdn;
-    script.setAttribute("crossorigin", "anonymous");
-    script.setAttribute("integrity", DEFAULT_INTEGRITY);
-    script.setAttribute("referrerpolicy", "no-referrer");
-    head.appendChild(script);
-    script.onload = this.pdfLoaded;
-    this.remove = () => head?.removeChild(script);
+    onStartLoad?.();
+    this.loadPDf()
+      .then((ok) => (ok ? this.renderPage() : undefined))
+      .catch((e) => onLoaded?.(e));
   };
 
-  private pdfLoaded = async () => {
+  private loadPDf = async (): Promise<boolean> => {
+    const req = ++this.loadReq;
+    const { url } = this.props;
+    this.releaseDocument();
+    if (!url) return false;
+    let task: any;
     try {
-      await this.initPdf();
-      await this.loadPDf();
-      this.renderPage();
-    } catch (e: any) {
-      console.error(e.message || e);
+      const pdfjsLib = await loadPdfJs();
+      if (req !== this.loadReq) return false;
+      task = pdfjsLib.getDocument({
+        url,
+        isEvalSupported: false, // CVE-2024-4367, fixed upstream only in 4.2.67
+        cMapUrl: CMAP_URL,
+        cMapPacked: true,
+      });
+      this.loadingTask = task;
+      const pdf = await task.promise;
+      if (req !== this.loadReq) return false;
+      this.pdf = pdf;
+      return true;
+    } catch (e) {
+      if (req !== this.loadReq) return false; // superseded or unmounted
+      throw e;
     }
+  };
+
+  private releaseDocument = () => {
+    this.resetPages();
+    this.textCache.clear();
+    this.pdf = undefined;
+    // Terminates this document's Web Worker and unregisters its fonts.
+    this.loadingTask?.destroy().catch(() => undefined);
+    this.loadingTask = undefined;
+    if (this.refCanvasWrap) this.refCanvasWrap.innerHTML = "";
+  };
+
+  // Ends the current pass: in-flight work is cancelled and canvases freed.
+  private resetPages = () => {
+    ++this.renderGen;
+    ++this.paintGen;
+    this.observer?.disconnect();
+    this.observer = undefined;
+    Array.from(this.pages.keys()).forEach(this.evict);
+    this.slots.clear();
+    this.visible.clear();
+    this.active.clear();
+    this.pageError = undefined;
+    // Let a pending renderPage settle; its generation check skips onLoaded.
+    this.onIdle?.();
+    this.onIdle = undefined;
+  };
+
+  private evict = (page: number) => {
+    const entry = this.pages.get(page);
+    if (!entry) return;
+    this.pages.delete(page);
+    entry.task?.cancel();
+    [entry.base, entry.hl].forEach((c) => {
+      c.width = 0; // release the bitmap now (iOS keeps it until GC otherwise)
+      c.height = 0;
+    });
+    entry.div.innerHTML = "";
+    entry.pagePdf.cleanup();
   };
 
   private loadResize = () => {
     if (this.timeoutRender) clearTimeout(this.timeoutRender);
-    this.timeoutRender = setTimeout(async () => {
-      const { debug } = this.props;
-      if (debug && __DEV__) {
-        console.info("Resize PDF");
-      }
-      const { onStartLoad } = this.props;
-      onStartLoad?.();
+    this.timeoutRender = setTimeout(() => {
+      const wrap = this.refCanvasWrap;
+      if (!wrap || !this.pdf || this.unmounted) return;
+      const w = wrap.clientWidth;
+      if (!w) return; // hidden (display:none, closed tab/modal)
+      const ratio = this.renderedWidth ? w / this.renderedWidth : 0;
+      // Canvases are width:100%, so CSS absorbs small and height-only changes
+      // (scrollbars, the iOS toolbar). Re-rasterize only when the bitmap would
+      // be visibly soft (>10% upscale) or badly oversized.
+      if (ratio && ratio <= 1.1 && ratio >= 0.75) return;
+      if (this.props.debug) console.info("[PDFHighlight] resize", w);
+      this.props.onStartLoad?.();
       this.renderPage();
-    }, 100);
+    }, 150);
   };
 
-  private initPdf = async () => {
-    let interval: NodeJS.Timeout;
-    let loop = 0;
-    return new Promise((res, rej) => {
-      let pdfjsLib = (window?.globalThis as any)?.pdfjsLib;
-      if (!pdfjsLib) {
-        interval = setInterval(() => {
-          loop++;
-          if ((window?.globalThis as any)?.pdfjsLib || loop === 60) {
-            pdfjsLib = (window?.globalThis as any)?.pdfjsLib;
-            if (pdfjsLib) {
-              pdfjsLib.GlobalWorkerOptions.workerSrc = DEFAULT_CDN_WORKER;
-              res(null);
-            } else rej("Browser loaded PDFJs Failed");
-            clearInterval(interval);
-          }
-        }, 100);
-      } else {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = DEFAULT_CDN_WORKER;
-        res(null);
-      }
-    });
-  };
+  private isCancelled = (e: any) => e?.name === "RenderingCancelledException";
 
-  private loadPDf = async (props = this.props) => {
-    const { url } = props;
-    if (!url) return;
-    return new Promise((res, rej) => {
-      const { pdfjsLib } = window.globalThis as any;
-      const loadingTask = pdfjsLib.getDocument(url);
-      loadingTask.promise.then((pdf: any) => this.setPdf(pdf, res)).catch(rej);
-    });
-  };
-
-  private setPdf = (pdf: any, callback: (pdf: any) => void) => {
-    this.pdf = pdf;
-    callback(pdf);
-  };
-
-  private renderPage = async (props = this.props) => {
-    if (!this.pdf) return;
-    if (this.refCanvasWrap) this.refCanvasWrap.innerHTML = "";
-    const { onLoaded, page } = props;
+  // Lays out one placeholder per page, then rasterizes pages lazily as they
+  // approach the viewport. onLoaded fires once the first visible batch is drawn.
+  private renderPage = async () => {
+    const pdf = this.pdf; // capture once: never switch documents mid-pass
+    const wrap = this.refCanvasWrap;
+    if (!pdf || !wrap || !wrap.clientWidth) return;
+    this.resetPages();
+    const gen = this.renderGen;
+    const { onLoaded, page } = this.props;
     try {
-      if (page) {
-        const pagePdf = await this.pdf.getPage(page);
-        await this.renderPdf(pagePdf, props, page);
-      } else {
-        const totalPages = this.pdf.numPages;
-        let promises = [];
-        for (let i = 1; i <= totalPages; i++) {
-          const pagePdf = await this.pdf.getPage(i);
-          promises.push(this.renderPdf(pagePdf, props, i));
-        }
-        await Promise.all(promises);
-      }
-      onLoaded?.();
-    } catch {
-      onLoaded?.();
+      const nums = page
+        ? [page]
+        : Array.from({ length: pdf.numPages }, (_, i) => i + 1);
+      // Size every placeholder like the first page so the scroll height is
+      // right before anything is drawn; each page fixes its ratio on render.
+      const first = await pdf.getPage(nums[0]);
+      if (gen !== this.renderGen) return;
+      const vp = first.getViewport({ scale: 1 });
+      const frag = document.createDocumentFragment();
+      nums.forEach((n) => {
+        const div = document.createElement("div");
+        div.dataset.page = String(n); // per instance, no global ids
+        div.style.position = "relative";
+        div.style.aspectRatio = `${vp.width} / ${vp.height}`;
+        frag.appendChild(div);
+        this.slots.set(n, div);
+      });
+      const keep =
+        wrap.scrollHeight > wrap.clientHeight
+          ? wrap.scrollTop / wrap.scrollHeight
+          : 0;
+      wrap.innerHTML = "";
+      wrap.appendChild(frag);
+      if (keep) wrap.scrollTop = keep * wrap.scrollHeight;
+      this.renderedWidth = wrap.clientWidth;
+      const error = await this.observePages(wrap, gen);
+      if (gen === this.renderGen) onLoaded?.(error);
+    } catch (e) {
+      if (gen === this.renderGen && !this.isCancelled(e)) onLoaded?.(e);
     }
   };
 
-  private renderPdf = async (
-    pagePdf: any,
-    props = this.props,
-    page: number
+  private observePages = (wrap: HTMLDivElement, gen: number) =>
+    new Promise<any>((resolve) => {
+      this.onIdle = resolve;
+      if (typeof IntersectionObserver === "undefined") {
+        this.slots.forEach((_, n) => this.visible.add(n));
+        this.pump(gen);
+        return;
+      }
+      // The wrapper is the root when it scrolls itself; otherwise the viewport.
+      const root = wrap.scrollHeight > wrap.clientHeight ? wrap : null;
+      const observer = new IntersectionObserver(
+        (entries) => {
+          if (gen !== this.renderGen) return;
+          entries.forEach((e) => {
+            const n = Number((e.target as HTMLElement).dataset.page);
+            if (e.isIntersecting) {
+              this.visible.add(n);
+            } else {
+              this.visible.delete(n);
+              this.evict(n);
+            }
+          });
+          this.pump(gen);
+        },
+        { root, rootMargin: RENDER_MARGIN }
+      );
+      this.observer = observer;
+      this.slots.forEach((div) => observer.observe(div));
+    });
+
+  // Starts renders for visible pages, at most MAX_CONCURRENT_RENDERS at once.
+  private pump = (gen: number) => {
+    const queue = Array.from(this.visible)
+      .filter((n) => !this.pages.has(n) && !this.active.has(n))
+      .sort((a, b) => a - b);
+    while (this.active.size < MAX_CONCURRENT_RENDERS && queue.length) {
+      const n = queue.shift() as number;
+      this.active.add(n);
+      this.renderPdf(n, gen)
+        .catch((e) => {
+          if (gen !== this.renderGen || this.isCancelled(e)) return;
+          this.pageError = this.pageError || e;
+          if (this.props.debug) console.error("[PDFHighlight] page", n, e);
+        })
+        .then(() => {
+          if (gen !== this.renderGen) return;
+          this.active.delete(n);
+          this.pump(gen);
+        });
+    }
+    if (!this.active.size && this.onIdle) {
+      this.onIdle(this.pageError);
+      this.onIdle = undefined;
+    }
+  };
+
+  private renderPdf = async (page: number, gen: number) => {
+    const pdf = this.pdf;
+    const div = this.slots.get(page);
+    if (!pdf || !div) return;
+    const pagePdf = await pdf.getPage(page);
+    if (gen !== this.renderGen || !this.visible.has(page)) return;
+    const { scale = 1, allowHtml } = this.props;
+    const vp1 = pagePdf.getViewport({ scale: 1 });
+    const dpr = window.devicePixelRatio || 1;
+    const rasterScale = Math.min(
+      Math.max(scale, (this.renderedWidth / vp1.width) * dpr),
+      Math.sqrt(MAX_CANVAS_PIXELS / (vp1.width * vp1.height))
+    );
+    const viewport = pagePdf.getViewport({ scale: rasterScale });
+    div.style.aspectRatio = `${vp1.width} / ${vp1.height}`;
+
+    const base = document.createElement("canvas");
+    const hl = document.createElement("canvas"); // highlights live here
+    [base, hl].forEach((c) => {
+      c.width = Math.floor(viewport.width);
+      c.height = Math.floor(viewport.height);
+      c.style.display = "block";
+      c.style.width = "100%";
+    });
+    hl.style.position = "absolute";
+    hl.style.left = "0";
+    hl.style.top = "0";
+    hl.style.height = "100%";
+    hl.style.pointerEvents = "none";
+    div.appendChild(base);
+    div.appendChild(hl);
+
+    const ctx = base.getContext("2d");
+    if (!ctx) return;
+    const entry: PageEntry = { pagePdf, div, base, hl, viewport, vp1 };
+    this.pages.set(page, entry);
+    const textLayer = allowHtml
+      ? this.appendTextToCanvas(entry, page)
+      : undefined;
+    const text = this.getText(pagePdf, page); // fetched alongside the render
+    entry.task = pagePdf.render({ canvasContext: ctx, viewport });
+    await Promise.all([entry.task.promise, text, textLayer]);
+    // Paint once rendered: pdf.js has loaded the PDF's own fonts by then.
+    await this.paintPage(page, this.paintGen);
+  };
+
+  private getText = (pagePdf: any, page: number): Promise<TextContent> => {
+    let p = this.textCache.get(page);
+    if (!p) {
+      const created: Promise<TextContent> = pagePdf.getTextContent();
+      this.textCache.set(page, created);
+      created.catch(() => {
+        if (this.textCache.get(page) === created) this.textCache.delete(page);
+      });
+      p = created;
+    }
+    return p;
+  };
+
+  private repaintHighlights = () => {
+    const paint = ++this.paintGen;
+    this.pages.forEach((_, page) => {
+      this.paintPage(page, paint).catch(() => undefined);
+    });
+  };
+
+  private paintPage = async (page: number, paint: number) => {
+    const entry = this.pages.get(page);
+    const ctx = entry?.hl.getContext("2d");
+    if (!entry || !ctx) return;
+    ctx.clearRect(0, 0, entry.hl.width, entry.hl.height);
+    const { keywords = [], pageSearch, replaceTexts = [] } = this.props;
+    const search = !!keywords.length && (!pageSearch || pageSearch === page);
+    if (!search && !replaceTexts.length) return;
+    const tc = await this.getText(entry.pagePdf, page);
+    if (paint !== this.paintGen || this.pages.get(page) !== entry) return;
+    const p: Paint = { ctx, tc, viewport: entry.viewport, pagePdf: entry.pagePdf };
+    const removes = this.props.specialWordRemoves || [];
+    const original = this.buildIndex(tc.items, removes);
+    const reps = this.planReplacements(original);
+    // Replacements first, so highlights stay visible on top of them.
+    this.drawReplacements(p, reps, page);
+    if (!search) return;
+    // Keywords match what is displayed, i.e. the text after replacement.
+    const shown = reps.length ? this.buildIndex(tc.items, removes, reps) : original;
+    this.drawHighlights(p, shown, page);
+  };
+
+  // The font pdf.js drew the item with: the PDF's embedded font (a FontFace
+  // pdf.js registers while rendering) in its weight and style, then the
+  // generic fallback.
+  private fontOf = (p: Paint, item: Contents, size: number) => {
+    const style = p.tc.styles[item.fontName];
+    const fallback = (style && style.fontFamily) || "sans-serif";
+    const objs = p.pagePdf.commonObjs;
+    const font =
+      objs && objs.has(item.fontName) ? objs.get(item.fontName) : undefined;
+    if (!font) return `${size}px "${item.fontName}", ${fallback}`;
+    const weight = font.black ? "900" : font.bold ? "bold" : "normal";
+    const italic = font.italic ? "italic" : "normal";
+    const family =
+      (font.systemFontInfo && font.systemFontInfo.css) ||
+      `"${font.loadedName}", ${font.fallbackName || fallback}`;
+    return `${italic} ${weight} ${size}px ${family}`;
+  };
+
+  // Box of item.str[start, end). Browser widths are scaled onto the exact PDF
+  // advance (item.width); `track` is the extra spacing per char the PDF adds.
+  private sliceBox = (p: Paint, { item, start, end }: Slice): Box => {
+    const { Util } = (window.globalThis as any).pdfjsLib;
+    const style = p.tc.styles[item.fontName];
+    const tx: number[] = Util.transform(p.viewport.transform, item.transform);
+    const fontH = Math.hypot(tx[2], tx[3]);
+    const asc =
+      style && Number.isFinite(style.ascent) && style.ascent > 0
+        ? style.ascent
+        : 0.8;
+    const desc =
+      style && Number.isFinite(style.descent) && style.descent < 0
+        ? style.descent
+        : -0.2;
+    const font = this.fontOf(p, item, fontH);
+    p.ctx.font = font;
+    const target = item.width * p.viewport.scale;
+    const full = p.ctx.measureText(item.str).width || 1;
+    const k = target / full;
+    const x0 = p.ctx.measureText(item.str.slice(0, start)).width * k;
+    const x1 = p.ctx.measureText(item.str.slice(0, end)).width * k;
+    return {
+      tx,
+      angle: Math.atan2(tx[1], tx[0]),
+      x0,
+      w: x1 - x0,
+      y: -asc * fontH,
+      h: (asc - desc) * fontH,
+      font,
+      track: (target - full) / Math.max(1, item.str.length),
+    };
+  };
+
+  // One box spanning boxes of the same line, in the first box's frame, so a
+  // phrase gets one continuous band across the gaps between words.
+  private mergeBoxes = (boxes: Box[]): Box => {
+    const f = boxes[0];
+    const cos = Math.cos(f.angle);
+    const sin = Math.sin(f.angle);
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    boxes.forEach((b) => {
+      const dx = b.tx[4] - f.tx[4];
+      const dy = b.tx[5] - f.tx[5];
+      const u = dx * cos + dy * sin;
+      const v = dy * cos - dx * sin;
+      x0 = Math.min(x0, u + b.x0);
+      x1 = Math.max(x1, u + b.x0 + b.w);
+      y0 = Math.min(y0, v + b.y);
+      y1 = Math.max(y1, v + b.y + b.h);
+    });
+    return { ...f, x0, w: x1 - x0, y: y0, h: y1 - y0 };
+  };
+
+  private lineBox = (p: Paint, line: Slice[]) =>
+    this.mergeBoxes(line.map((s) => this.sliceBox(p, s)));
+
+  // Consecutive slices whose items share a baseline form one visual line.
+  private lines = <T extends Slice>(slices: T[]): T[][] => {
+    const out: T[][] = [];
+    slices.forEach((s) => {
+      const line = out[out.length - 1];
+      if (line && this.sameLine(line[line.length - 1].item, s.item)) {
+        line.push(s);
+      } else {
+        out.push([s]);
+      }
+    });
+    return out;
+  };
+
+  private sameLine = (a: Contents, b: Contents) => {
+    if (a === b) return true;
+    const ta = a.transform;
+    const tb = b.transform;
+    const angle = Math.atan2(ta[1], ta[0]);
+    if (Math.abs(angle - Math.atan2(tb[1], tb[0])) > 0.01) return false;
+    const size = Math.hypot(ta[2], ta[3]) || 1;
+    const off =
+      (tb[5] - ta[5]) * Math.cos(angle) - (tb[4] - ta[4]) * Math.sin(angle);
+    return Math.abs(off) < size / 2;
+  };
+
+  // Sets the box's font and the PDF's spacing for drawing `text`; returns the
+  // scale (<= 1) that fits it into the box.
+  private useFont = (ctx: CanvasRenderingContext2D, b: Box, text: string) => {
+    ctx.font = b.font;
+    if ("letterSpacing" in ctx) (ctx as any).letterSpacing = `${b.track}px`;
+    return Math.min(1, b.w / (ctx.measureText(text).width || 1));
+  };
+
+  // Box of part.text[start, end) as drawReplacements draws it.
+  private replacedBox = (
+    p: Paint,
+    part: ReplaceSlice,
+    start: number,
+    end: number
+  ): Box => {
+    const { ctx } = p;
+    const b = this.lineBox(p, part.line);
+    ctx.save();
+    const k = this.useFont(ctx, b, part.text);
+    const x0 = b.x0 + ctx.measureText(part.text.slice(0, start)).width * k;
+    const x1 = b.x0 + ctx.measureText(part.text.slice(0, end)).width * k;
+    ctx.restore();
+    return { ...b, x0, w: x1 - x0 };
+  };
+
+  private drawReplacements = (p: Paint, parts: ReplaceSlice[], page: number) => {
+    const { ctx } = p;
+    if (this.props.debug && parts.length) {
+      console.info("[PDFHighlight] page", page, "replaced slices", parts.length);
+    }
+    parts.forEach((part) => {
+      if (part !== part.line[0]) return; // drawn once per visual line
+      ctx.save();
+      const b = this.lineBox(p, part.line);
+      const pad = b.h * 0.05; // hide anti-aliased edges of the original glyphs
+      ctx.translate(b.tx[4], b.tx[5]);
+      ctx.rotate(b.angle);
+      ctx.fillStyle = part.rule.background || "#fff";
+      ctx.fillRect(b.x0 - pad, b.y - pad, b.w + 2 * pad, b.h + 2 * pad);
+      if (part.text && b.w > 0) {
+        const k = this.useFont(ctx, b, part.text);
+        ctx.fillStyle = part.rule.color || "#000";
+        ctx.textBaseline = "alphabetic";
+        // A longer replacement is scaled down evenly on its baseline to fit,
+        // never squeezed horizontally.
+        ctx.save();
+        ctx.translate(b.x0, 0);
+        ctx.scale(k, k);
+        ctx.fillText(part.text, 0, 0);
+        ctx.restore();
+        // Replaced text is marked like a keyword match.
+        this.mark(ctx, b.x0, b.y, ctx.measureText(part.text).width * k, b.h);
+      }
+      ctx.restore();
+    });
+  };
+
+  // One highlight box in the current transform: a translucent fill, or a
+  // border with isBorderHighlight.
+  private mark = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number
   ) => {
-    if (!this.refCanvasWrap) return;
-    const { width } = this.refCanvasWrap.getBoundingClientRect();
+    const { colorHighlight = "yellow", isBorderHighlight } = this.props;
+    ctx.save();
+    if (isBorderHighlight) {
+      ctx.strokeStyle = colorHighlight;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, w, h);
+    } else {
+      ctx.fillStyle = colorHighlight;
+      ctx.globalAlpha = 0.2;
+      ctx.fillRect(x, y, w, h);
+    }
+    ctx.restore();
+  };
+
+  // Every occurrence of every replaceTexts rule as per-item pieces, with the
+  // replacement text spread over the visual lines the match spans. Earlier
+  // rules win where matches overlap.
+  private planReplacements = (index: PageIndex): ReplaceSlice[] => {
+    const { replaceTexts = [], specialWordRemoves = [] } = this.props;
+    const out: ReplaceSlice[] = [];
+    const taken = new Uint8Array(index.text.length);
+    const size = (line: Slice[]) => line.reduce((n, s) => n + s.end - s.start, 0);
+    replaceTexts.forEach((rule) => {
+      const needle = this.normalizeNeedle(rule.search, specialWordRemoves, Infinity);
+      const text = rule.replace || "";
+      this.findAll(index, needle).forEach(([from, to]) => {
+        for (let i = from; i < to; i++) if (taken[i]) return;
+        taken.fill(1, from, to);
+        const lines = this.lines(this.slices(index, from, to));
+        const total = lines.reduce((n, l) => n + size(l), 0);
+        let acc = 0;
+        let pos = 0;
+        lines.forEach((l, i) => {
+          acc += size(l);
+          const cut =
+            i === lines.length - 1
+              ? text.length
+              : this.cutAt(text, pos, Math.round((text.length * acc) / total));
+          const chunk = text.slice(pos, cut).trim();
+          pos = cut;
+          const line: ReplaceSlice[] = [];
+          l.forEach((s, j) => {
+            const piece = { item: s.item, start: s.start, end: s.end, rule, line };
+            line.push({ ...piece, text: j ? "" : chunk });
+          });
+          line.forEach((piece) => out.push(piece));
+        });
+      });
+    });
+    return out;
+  };
+
+  // A cut near `target`, on whitespace when one is close, so words are not
+  // split across lines.
+  private cutAt = (text: string, from: number, target: number) => {
+    for (let d = 0; d <= 10; d++) {
+      const back = target - d;
+      const fwd = target + d;
+      if (back > from && back <= text.length && /\s/.test(text[back - 1])) {
+        return back;
+      }
+      if (fwd > from && fwd < text.length && /\s/.test(text[fwd])) return fwd;
+    }
+    return Math.max(from, Math.min(text.length, target));
+  };
+
+  private drawHighlights = (p: Paint, index: PageIndex, page: number) => {
+    const { ctx } = p;
     const {
       keywords = [],
-      scale = 1,
-      pageSearch,
-      allowHtml,
+      specialWordRemoves = [],
       maxKeywordLength = 2000,
-    } = props;
-
-    const div = document.createElement("div");
-    div.id = `wrap-canvas-page-${page}`;
-    div.style.position = "relative";
-
-    const id = `canvas-page-${page}`;
-    const canvas: HTMLCanvasElement = document.createElement("canvas");
-    canvas.id = id;
-
-    div.appendChild(canvas);
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    let viewport = pagePdf.getViewport({ scale: 1 });
-    const size = viewport;
-    let newScale = Math.ceil(width / viewport.width);
-    if (newScale < scale) {
-      newScale = scale;
-    }
-    const exist = document.querySelector(`#${id}`);
-    if (exist) this.refCanvasWrap.removeChild(exist);
-    this.refCanvasWrap.appendChild(div);
-    viewport = pagePdf.getViewport({ scale: newScale });
-    if (allowHtml) {
-      this.appendTextToCanvas(pagePdf, div, newScale, viewport.width / width);
-    }
-    canvas.style.width = `${width}px`;
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
-    const renderTask = await pagePdf.render({ canvasContext: ctx, viewport });
-    await renderTask.promise;
-    if (pageSearch && pageSearch !== page) return;
-    const promiseAll = keywords.map(async (keyword) => {
-      if (maxKeywordLength && keyword.length > maxKeywordLength) {
-        console.warn("Keywords are too big: " + keyword.length + " characters");
+      debug,
+    } = this.props;
+    const needles = Array.from(
+      new Set(
+        keywords.map((k) =>
+          this.normalizeNeedle(k, specialWordRemoves, maxKeywordLength)
+        )
+      )
+    ).filter(Boolean); // drops whitespace-only keywords
+    for (const needle of needles) {
+      const matches = this.findAll(index, needle);
+      if (debug) {
+        console.info("[PDFHighlight] page", page, "matches", matches.length, needle);
       }
-      return this.hightlightText(
-        pagePdf,
-        keyword,
-        ctx,
-        {
-          ...size,
-          scale: newScale,
-        },
-        props
-      );
-    });
-    return Promise.all(promiseAll);
-  };
-
-  private appendTextToCanvas = async (
-    pagePdf: any,
-    parent: HTMLDivElement,
-    scale: number,
-    scaleReal: number
-  ) => {
-    const { items, styles } = await pagePdf.getTextContent();
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      const style = styles[item.fontName];
-      const div = document.createElement("div");
-      div.style.position = "absolute";
-      div.style.color = "transparent";
-      div.style.fontFamily = style.fontFamily;
-      div.style.fontSize = `${(item.transform[3] * scale) / scaleReal}px`;
-      div.style.letterSpacing = `${0.3}px`;
-      div.style.minWidth = `${(item.width * scale) / scaleReal}px`;
-      div.style.left = `${(item.transform[4] * scale) / scaleReal}px`;
-      div.style.bottom = `${(item.transform[5] * scale) / scaleReal}px`;
-      div.innerHTML = item.str;
-      parent.appendChild(div);
+      for (const [from, to] of matches) {
+        for (const line of this.lines(this.slices(index, from, to))) {
+          const b = this.mergeBoxes(
+            line.map((s) =>
+              s.rep < 0
+                ? this.sliceBox(p, s)
+                : this.replacedBox(p, index.reps[s.rep], s.start, s.end)
+            )
+          );
+          ctx.save();
+          ctx.translate(b.tx[4], b.tx[5]);
+          ctx.rotate(b.angle);
+          this.mark(ctx, b.x0, b.y, b.w, b.h);
+          ctx.restore();
+        }
+      }
     }
   };
 
-  private makeSpacing = (
-    width: number,
-    str: string,
-    scale: number,
-    ctx: any,
-    spacing: number,
-    indexLoop: number
-  ): number => {
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    if (isSafari || indexLoop > 500) return spacing;
-    const { extractLetterSpacing = 0.1 } = this.props;
-    ctx.save();
-    ctx.letterSpacing = `${spacing * scale}px`;
-    const { width: w } = ctx.measureText(str);
-    ctx.restore();
-    if (
-      Math.floor(w / scale) - 4 * scale <= Math.floor(width) &&
-      Math.floor(w / scale) + 4 * scale >= Math.floor(width)
-    ) {
-      return spacing;
-    }
-    indexLoop++;
-    if (Math.floor(w / scale) > Math.floor(width)) {
-      return this.makeSpacing(
-        width,
-        str,
-        scale,
-        ctx,
-        spacing - extractLetterSpacing,
-        indexLoop
-      );
-    }
-    return this.makeSpacing(
-      width,
-      str,
-      scale,
-      ctx,
-      spacing + extractLetterSpacing,
-      indexLoop
-    );
-  };
-
-  private hightlightText = async (
-    pagePdf: any,
-    keyword: string,
-    ctx: CanvasRenderingContext2D,
-    viewport: { width: number; height: number; scale: number },
-    props = this.props
-  ) => {
-    if (!keyword) return;
-    const { items, styles } = await pagePdf.getTextContent();
-    const findObject = this.findObjects(items, keyword);
-    const { objects, begin: indexBegin, end } = findObject;
-    if (indexBegin < 0) return;
-    if (!objects.length) return;
-
-    const { colorHighlight = "yellow", isBorderHighlight } = props;
-
-    let indexSub = indexBegin;
-    for (let index = 0; index < objects.length; index++) {
-      const object = objects[index];
-      const str = object.str;
-      const style = styles[object.fontName];
-      ctx.save();
-      ctx.beginPath();
-      ctx.font = `${object.transform[3] * viewport.scale}px ${
-        style.fontFamily
-      }`;
-      let indexLoop = 0;
-      const spacing: number = this.makeSpacing(
-        object.width,
-        str,
-        viewport.scale,
-        ctx,
-        0.3,
-        indexLoop
-      ) as number;
-      (ctx as any).letterSpacing = `${spacing}px`;
-      let w1 = 0;
-      let w2 = 0;
-      if (!index) {
-        w1 = ctx.measureText(str.substring(0, indexSub)).width;
-        w2 = ctx.measureText(
-          str.substring(indexSub + keyword.length, str.length)
-        ).width;
-      } else if (index === objects.length - 1) {
-        const textEnd = str.slice(end, str.length);
-        w2 = ctx.measureText(textEnd).width;
-      }
-      const w = (object.width - (w1 + w2) / viewport.scale) * viewport.scale;
-      const x = Math.floor(object.transform[4] + w1 / viewport.scale);
-      if (isBorderHighlight) {
-        ctx.strokeStyle = colorHighlight;
-        ctx.lineWidth = 1;
-        ctx.globalAlpha = 1;
-      } else {
-        ctx.fillStyle = colorHighlight;
-        ctx.globalAlpha = 0.2;
-      }
-      const y =
-        viewport.height -
-        object.transform[5] -
-        object.height +
-        style.ascent -
-        style.descent;
-
-      if (!isBorderHighlight) {
-        ctx.fillRect(
-          x * viewport.scale - viewport.scale / 2,
-          y * viewport.scale,
-          w,
-          object.height * viewport.scale
-        );
-      } else {
-        ctx.strokeRect(
-          x * viewport.scale - viewport.scale / 2,
-          y * viewport.scale,
-          w,
-          object.height * viewport.scale
-        );
-      }
-      ctx.closePath();
-      ctx.restore();
-      indexSub += str.length;
-    }
-    return;
-  };
-
-  private parseKeyword = (word: string) => {
-    const { specialWordRemoves } = this.props;
-    let keyword = word.replace(/\n/g, " ").trim();
-    specialWordRemoves?.forEach((key) => {
-      keyword = keyword.replaceAll(key, " ");
-    });
-    return keyword;
-  };
-
-  private deleteSpace = (word: string) => {
-    return word.replaceAll(" ", "");
-  };
-
-  private get_end_pdf_Is_start_search(pdf: string, search: string) {
-    let startIndex = -1;
-    let length = Math.min(pdf.length, search.length);
-    let longestCommon = "";
-    const strBTrim = this.deleteSpace(search);
-    for (let i = length; i > 0; i--) {
-      const partOfString1 = pdf.substring(pdf.length - i);
-      if (strBTrim.startsWith(this.deleteSpace(partOfString1))) {
-        startIndex = pdf.length - i;
-        longestCommon = partOfString1;
-        break;
-      }
-    }
-    return { longestCommon, startIndex };
-  }
-
-  private get_start_pdf_Is_start_search(pdf: string, search: string) {
-    let startIndex = -1;
-    let length = Math.min(pdf.length, search.length);
-    let longestCommon = "";
-    const strBTrim = this.deleteSpace(search);
-    for (let i = 1; i <= length; i++) {
-      const partOfString1 = pdf.substring(0, i);
-      if (strBTrim.startsWith(this.deleteSpace(partOfString1))) {
-        startIndex = i - partOfString1.length;
-        longestCommon = partOfString1;
-      }
-    }
-    return { longestCommon, startIndex };
-  }
-
-  private findObjects = (
-    contents: Contents[],
-    keyword: string
-  ): ValueFindObject => {
-    const { debug, maxKeywordLength = 2000 } = this.props;
-    let stringSearch = this.parseKeyword(keyword).substring(
-      0,
-      maxKeywordLength || 2000
-    );
-    const object = contents.find((e) => e.str.includes(stringSearch));
-    if (debug && __DEV__) {
-      console.log(
-        "------------------------------ INFO ------------------------------"
-      );
-      console.info(contents);
-    }
-    if (object) {
-      const strs = this.parseKeyword(object.str).split(stringSearch);
-      const { startIndex, longestCommon } = {
-        startIndex: strs[0].length,
-        longestCommon: strs[0],
-      };
-      if (debug && __DEV__) {
-        console.info("start matching => ", startIndex, "keyword => ", keyword);
-      }
-      return {
-        objects: [object],
-        begin: startIndex,
-        end: longestCommon.length,
-        matching: keyword,
-      };
-    }
-    let values: ValueFindObject = {
-      objects: [],
-      begin: -1,
-      end: -1,
-      matching: "",
+  // Whitespace-free page text plus a map from each char back to its source:
+  // (item, offset) in the PDF text, or (replacement, offset) where `reps`
+  // changed what is displayed.
+  private buildIndex = (
+    items: Contents[],
+    removes: string[],
+    reps: ReplaceSlice[] = []
+  ): PageIndex => {
+    const chars: string[] = [];
+    const item: number[] = [];
+    const off: number[] = [];
+    const rep: number[] = [];
+    const clean = (s: string) => {
+      removes.forEach((r) => {
+        if (r) s = s.split(r).join(" ".repeat(r.length)); // keep offsets
+      });
+      return s;
     };
+    const add = (s: string, i: number, r: number, from: number, to: number) => {
+      for (let j = from; j < to; j++) {
+        if (/\s/.test(s[j])) continue;
+        chars.push(s[j]);
+        item.push(i);
+        off.push(j);
+        rep.push(r);
+      }
+    };
+    const repsOf = new Map<Contents, number[]>();
+    reps.forEach((r, n) => repsOf.set(r.item, (repsOf.get(r.item) || []).concat(n)));
+    items.forEach((it, i) => {
+      const s = clean(it.str || "");
+      let pos = 0;
+      (repsOf.get(it) || [])
+        .sort((a, b) => reps[a].start - reps[b].start)
+        .forEach((n) => {
+          const t = clean(reps[n].text);
+          add(s, i, -1, pos, reps[n].start);
+          add(t, i, n, 0, t.length);
+          pos = reps[n].end;
+        });
+      add(s, i, -1, pos, s.length);
+    });
+    return { text: chars.join(""), item, off, rep, items, reps };
+  };
 
-    for (let i = 0; i < contents.length; i++) {
-      const str = this.parseKeyword(contents[i].str);
-      if (!str.trim()) continue;
-      if (!values.objects.length) {
-        const { startIndex, longestCommon } = this.get_end_pdf_Is_start_search(
-          str,
-          stringSearch
-        );
-        if (startIndex > -1) {
-          values.objects.push(contents[i]);
-          values.begin = startIndex;
-          values.matching = longestCommon;
-          stringSearch = stringSearch.trim().replace(longestCommon.trim(), "");
-          if (debug && __DEV__) {
-            console.info(
-              "get_end_pdf_Is_start_search",
-              "start matching => ",
-              startIndex,
-              "keyword => ",
-              longestCommon,
-              "object begin => ",
-              contents[i]
-            );
-          }
-        }
-        continue;
-      }
-      if (!stringSearch.trim()) break;
-      const { startIndex, longestCommon } = this.get_start_pdf_Is_start_search(
-        str,
-        stringSearch
-      );
-      if (startIndex > -1) {
-        values.objects.push(contents[i]);
-        values.matching += longestCommon;
-        stringSearch = stringSearch
-          .trim()
-          .substring(startIndex + longestCommon.length, stringSearch.length);
-        values.end = longestCommon.length;
-        if (debug && __DEV__) {
-          console.info(values.matching);
-        }
-      } else {
-        if (debug && __DEV__) {
-          if (debug && __DEV__) {
-            console.error(
-              "------------------------------ NOT MATCH ------------------------------"
-            );
-            console.log("string check", str);
-            console.log("string search", stringSearch);
-            console.error(
-              "------------------------------ NOT MATCH ------------------------------"
-            );
-          }
-        }
-        values.objects = [];
-        values.begin = -1;
-        values.end = -1;
-        values.matching = "";
-        stringSearch = this.parseKeyword(keyword);
-      }
+  private normalizeNeedle = (keyword: string, removes: string[], max: number) => {
+    let k = keyword || "";
+    removes.forEach((r) => {
+      if (r) k = k.split(r).join(" ");
+    });
+    return k.replace(/\s+/g, "").slice(0, max || 2000);
+  };
+
+  private findAll = (idx: PageIndex, needle: string): [number, number][] => {
+    const out: [number, number][] = [];
+    if (!needle) return out;
+    let p = idx.text.indexOf(needle);
+    while (p !== -1) {
+      out.push([p, p + needle.length]);
+      p = idx.text.indexOf(needle, p + needle.length);
     }
-    if (debug && __DEV__) {
-      console.log(
-        "------------------------------ INFO ------------------------------"
-      );
+    return out;
+  };
+
+  // Splits an index range into [start, end) slices of one source string each:
+  // an item's raw text (rep = -1) or a replacement's text (rep = its index).
+  private slices = (idx: PageIndex, from: number, to: number) => {
+    const out: (Slice & { rep: number })[] = [];
+    let k = from;
+    while (k < to) {
+      const i = idx.item[k];
+      const r = idx.rep[k];
+      let last = k;
+      while (last + 1 < to && idx.item[last + 1] === i && idx.rep[last + 1] === r) {
+        last++;
+      }
+      out.push({ item: idx.items[i], start: idx.off[k], end: idx.off[last] + 1, rep: r });
+      k = last + 1;
     }
-    return values;
+    return out;
+  };
+
+  // Transparent, selectable text positioned in % of the page, so it follows
+  // CSS resizes without re-layout. Rebuilding replaces the previous layer.
+  private appendTextToCanvas = async (entry: PageEntry, page: number) => {
+    const { items, styles } = await this.getText(entry.pagePdf, page);
+    if (this.pages.get(page) !== entry) return; // evicted or superseded
+    const { Util } = (window.globalThis as any).pdfjsLib;
+    const { replaceTexts = [], specialWordRemoves = [] } = this.props;
+    const vp1 = entry.vp1;
+    // Selected/copied text shows the replacements too.
+    const edits = new Map<Contents, ReplaceSlice[]>();
+    if (replaceTexts.length) {
+      const index = this.buildIndex(items, specialWordRemoves);
+      this.planReplacements(index).forEach((r) => {
+        edits.set(r.item, (edits.get(r.item) || []).concat(r));
+      });
+    }
+    const layer = document.createElement("div");
+    layer.style.cssText =
+      "position:absolute;left:0;top:0;right:0;bottom:0;overflow:hidden;line-height:1;container-type:inline-size";
+    const frag = document.createDocumentFragment();
+    for (const item of items) {
+      if (!item.str) continue;
+      const style = styles[item.fontName];
+      const tx: number[] = Util.transform(vp1.transform, item.transform);
+      const fontH = Math.hypot(tx[2], tx[3]);
+      const asc =
+        style && Number.isFinite(style.ascent) && style.ascent > 0
+          ? style.ascent
+          : 0.8;
+      const span = document.createElement("span");
+      // PDF text is untrusted: never innerHTML
+      span.textContent = this.applyEdits(item.str, edits.get(item));
+      span.style.cssText =
+        "position:absolute;white-space:pre;color:transparent;transform-origin:0 0";
+      span.style.left = `${(tx[4] / vp1.width) * 100}%`;
+      span.style.top = `${((tx[5] - asc * fontH) / vp1.height) * 100}%`;
+      span.style.fontSize = `${(fontH / vp1.width) * 100}cqw`;
+      // The PDF's embedded font (registered by pdf.js), else the fallback.
+      span.style.fontFamily = `"${item.fontName}", ${(style && style.fontFamily) || "sans-serif"}`;
+      const angle = Math.atan2(tx[1], tx[0]);
+      if (angle) span.style.transform = `rotate(${angle}rad)`;
+      frag.appendChild(span);
+    }
+    layer.appendChild(frag);
+    entry.textLayer?.remove();
+    entry.textLayer = layer;
+    entry.div.appendChild(layer);
+  };
+
+  private applyEdits = (str: string, edits?: ReplaceSlice[]) => {
+    if (!edits) return str;
+    let out = "";
+    let pos = 0;
+    edits
+      .slice()
+      .sort((a, b) => a.start - b.start)
+      .forEach((e) => {
+        out += str.slice(pos, e.start) + e.text;
+        pos = e.end;
+      });
+    return out + str.slice(pos);
+  };
+
+  private setWrap = (ref: HTMLDivElement | null) => {
+    this.refCanvasWrap = ref;
   };
 
   render() {
     const { width = "100%", styleWrap } = this.props;
     return (
       <div
-        ref={(ref) => (this.refCanvasWrap = ref)}
+        ref={this.setWrap}
         style={{
           width,
           minHeight: "100%",
