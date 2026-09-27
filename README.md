@@ -12,6 +12,7 @@ type Props = {
   keywords?: string[] // The keywords parameter is a list (array) of words or phrases that you want to search for within a PDF document. These keywords are used to locate specific text within the PDF and highlight them based on the options you've configured (e.g., border or background highlighting),
   colorHighlight?: string // is a parameter that defines the color used for highlighting keywords in a PDF. It allows you to specify the color of the highlight, which can be either applied to the border (if isBorderHighlight is enabled) or to the background (if isBorderHighlight is disabled).,
   colorKeyword?: string // Highlight color for keyword matches only; replaced text keeps colorHighlight. Default = colorHighlight
+  keywordSolid?: boolean // Paints keyword matches in solid colorKeyword multiplied over the page (the paper takes the color, the ink stays dark, like a browser's find) instead of a translucent band. Default = false
   ignoreCase?: boolean // Match keywords case-insensitively. Default = false
   isBorderHighlight?: boolean // is a flag that allows highlighting keywords by drawing a border around them, instead of changing the background color. This can be useful when you want to visually emphasize the keywords without altering the background style, which can be especially useful for readability or design consistency.,
   styleWrap?: CSSProperties // Is a parameter or property that allows customization of the styles applied to the parent wrapper element that contains the canvas rendering the PDF content.,

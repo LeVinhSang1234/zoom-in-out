@@ -18,6 +18,7 @@ declare module "@pdf-highlight/react-pdf-highlight" {
     keywords?: string[]; // Words or phrases to highlight. Every occurrence is highlighted; matching ignores whitespace and line breaks and uses the displayed text (after replaceTexts).
     colorHighlight?: string; // Highlight color, applied to the background or to the border (isBorderHighlight). Default "yellow"
     colorKeyword?: string; // Highlight color for keyword matches only; replaced text keeps colorHighlight. Default colorHighlight
+    keywordSolid?: boolean; // Paints keyword matches in solid colorKeyword multiplied over the page (the paper takes the color, the ink stays dark, like a browser's find) instead of a translucent band. Default false
     ignoreCase?: boolean; // Match keywords case-insensitively. Default false
     isBorderHighlight?: boolean; // Draws a border around matches instead of a translucent background.
     styleWrap?: CSSProperties; // Styles for the wrapper element that contains the pages.

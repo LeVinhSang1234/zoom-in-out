@@ -29,6 +29,7 @@ interface Props {
   keywords?: string[];
   colorHighlight?: string;
   colorKeyword?: string;
+  keywordSolid?: boolean;
   ignoreCase?: boolean;
   isBorderHighlight?: boolean;
   styleWrap?: CSSProperties;
@@ -57,6 +58,7 @@ interface PageEntry {
   div: HTMLDivElement;
   base: HTMLCanvasElement;
   hl: HTMLCanvasElement;
+  found: HTMLCanvasElement;
   viewport: any;
   vp1: any;
   task?: any;
@@ -201,6 +203,7 @@ const HIGHLIGHT_KEYS: (keyof Props)[] = [
   "keywords",
   "colorHighlight",
   "colorKeyword",
+  "keywordSolid",
   "ignoreCase",
   "isBorderHighlight",
   "pageSearch",
@@ -398,7 +401,7 @@ class PDFHighlight extends Component<Props> {
     if (!entry) return;
     this.pages.delete(page);
     entry.task?.cancel();
-    [entry.base, entry.hl].forEach((c) => {
+    [entry.base, entry.hl, entry.found].forEach((c) => {
       c.width = 0; // release the bitmap now (iOS keeps it until GC otherwise)
       c.height = 0;
     });
@@ -542,19 +545,24 @@ class PDFHighlight extends Component<Props> {
 
     const base = document.createElement("canvas");
     const hl = document.createElement("canvas"); // highlights live here
-    [base, hl].forEach((c) => {
+    const found = document.createElement("canvas");
+    [base, hl, found].forEach((c) => {
       c.width = Math.floor(viewport.width);
       c.height = Math.floor(viewport.height);
       c.style.display = "block";
       c.style.width = "100%";
     });
-    hl.style.position = "absolute";
-    hl.style.left = "0";
-    hl.style.top = "0";
-    hl.style.height = "100%";
-    hl.style.pointerEvents = "none";
+    [hl, found].forEach((c) => {
+      c.style.position = "absolute";
+      c.style.left = "0";
+      c.style.top = "0";
+      c.style.height = "100%";
+      c.style.pointerEvents = "none";
+    });
+    found.style.mixBlendMode = "multiply";
     div.appendChild(base);
     div.appendChild(hl);
+    div.appendChild(found);
 
     const ctx = base.getContext("2d");
     if (!ctx) return;
@@ -563,6 +571,7 @@ class PDFHighlight extends Component<Props> {
       div,
       base,
       hl,
+      found,
       viewport,
       vp1,
       colors: new Map(),
@@ -602,8 +611,10 @@ class PDFHighlight extends Component<Props> {
   private paintPage = async (page: number, paint: number) => {
     const entry = this.pages.get(page);
     const ctx = entry?.hl.getContext("2d");
-    if (!entry || !ctx) return;
+    const foundCtx = entry?.found.getContext("2d");
+    if (!entry || !ctx || !foundCtx) return;
     ctx.clearRect(0, 0, entry.hl.width, entry.hl.height);
+    foundCtx.clearRect(0, 0, entry.found.width, entry.found.height);
     const { keywords = [], pageSearch, replaceTexts = [] } = this.props;
     const search = !!keywords.length && (!pageSearch || pageSearch === page);
     if (!search && !replaceTexts.length) {
@@ -624,12 +635,18 @@ class PDFHighlight extends Component<Props> {
     flows.forEach((flow) => this.drawFlow(p, flow));
     if (!search) return;
     // Keywords match what is displayed, i.e. the text after replacement.
-    this.drawHighlights(p, this.buildIndex(items, removes, reps), page);
+    this.drawHighlights(
+      p,
+      this.buildIndex(items, removes, reps),
+      page,
+      this.props.keywordSolid ? foundCtx : ctx,
+    );
   };
 
   private fitHeight = (entry: PageEntry, grow: number) => {
     const height = entry.base.height + Math.ceil(grow);
     if (entry.hl.height !== height) entry.hl.height = height;
+    if (entry.found.height !== height) entry.found.height = height;
     entry.div.style.aspectRatio = `${entry.vp1.width} / ${(entry.vp1.height * height) / entry.base.height}`;
   };
 
@@ -1490,6 +1507,7 @@ class PDFHighlight extends Component<Props> {
     w: number,
     h: number,
     color?: string,
+    solid?: boolean,
   ) => {
     const { isBorderHighlight } = this.props;
     const colorHighlight = color || this.props.colorHighlight || "yellow";
@@ -1500,7 +1518,7 @@ class PDFHighlight extends Component<Props> {
       ctx.strokeRect(x, y, w, h);
     } else {
       ctx.fillStyle = colorHighlight;
-      ctx.globalAlpha = 0.2;
+      ctx.globalAlpha = solid ? 1 : 0.2;
       ctx.fillRect(x, y, w, h);
     }
     ctx.restore();
@@ -1575,8 +1593,12 @@ class PDFHighlight extends Component<Props> {
     return Math.max(from, Math.min(text.length, target));
   };
 
-  private drawHighlights = (p: Paint, index: PageIndex, page: number) => {
-    const { ctx } = p;
+  private drawHighlights = (
+    p: Paint,
+    index: PageIndex,
+    page: number,
+    ctx: CanvasRenderingContext2D,
+  ) => {
     const {
       keywords = [],
       specialWordRemoves = [],
@@ -1614,7 +1636,15 @@ class PDFHighlight extends Component<Props> {
           ctx.save();
           ctx.translate(b.tx[4], b.tx[5] + dy);
           ctx.rotate(b.angle);
-          this.mark(ctx, b.x0, b.y, b.w, b.h, this.props.colorKeyword);
+          this.mark(
+            ctx,
+            b.x0,
+            b.y,
+            b.w,
+            b.h,
+            this.props.colorKeyword,
+            this.props.keywordSolid,
+          );
           ctx.restore();
         }
       }
