@@ -3,8 +3,8 @@ declare module "@pdf-highlight/react-pdf-highlight" {
   export type ReplaceText = {
     search: string; // Text to find (matching ignores whitespace and line breaks, like keywords)
     replace: string; // Text drawn instead; "" only covers the original
-    color?: string; // Text color, default "#000"
-    background?: string; // Color covering the original glyphs, default "#fff"
+    color?: string; // Text color, default: the page's ink color
+    background?: string; // Color covering the original glyphs, default: the page's paper color
   };
   type Props = {
     url?: string; // pdf file path
@@ -22,7 +22,8 @@ declare module "@pdf-highlight/react-pdf-highlight" {
     allowHtml?: boolean; // Adds a transparent, selectable text layer over each page so text can be selected and copied. Default = false
     specialWordRemoves?: string[]; // Strings ignored when matching keywords and replaceTexts (e.g. ["-"] to match across hyphenated line breaks).
     maxKeywordLength?: number; // Maximum number of characters (whitespace excluded) of each keyword that is matched. Default = 2000
-    replaceTexts?: ReplaceText[]; // Replaces text on screen and marks it like a keyword match. Display only: the PDF file itself is not modified, so do not use it for redaction.
+    replaceTexts?: ReplaceText[]; // Replaces text on screen and marks it like a keyword match. A longer replacement is flowed into its paragraph like typed text; only when the paragraph has no line left is it scaled down. Display only: the PDF file itself is not modified, so do not use it for redaction.
+    pdfjs?: any; // Your own pdf.js, e.g. `import * as pdfjs from "pdfjs-dist"`. Without it a global pdfjsLib is reused, and only otherwise pdf.js 3.11.174 is loaded from cdnjs.
   };
 
   export class PDFHighlight extends Component<Props> {}

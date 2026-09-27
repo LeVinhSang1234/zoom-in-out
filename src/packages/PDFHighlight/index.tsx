@@ -13,8 +13,8 @@ type Contents = {
 export type ReplaceText = {
   search: string;
   replace: string;
-  color?: string; // text color, default "#000"
-  background?: string; // covers the original glyphs, default "#fff"
+  color?: string; // text color, default: the page's ink
+  background?: string; // covers the original glyphs, default: the page's paper
 };
 
 type Props = {
@@ -35,6 +35,9 @@ type Props = {
   maxKeywordLength?: number;
   // Display-only: the PDF file and pdf.js text extraction keep the original.
   replaceTexts?: ReplaceText[];
+  // The app's own pdf.js (e.g. `import * as pdfjs from "pdfjs-dist"`). Without
+  // it a global pdfjsLib is reused, else pdf.js 3.11.174 comes from cdnjs.
+  pdfjs?: any;
 };
 
 type TextStyle = { fontFamily: string; ascent: number; descent: number };
@@ -48,6 +51,7 @@ type PageEntry = {
   vp1: any;
   task?: any;
   textLayer?: HTMLDivElement;
+  colors: Map<string, Colors>; // sampled from the rendered page, by region
 };
 type PageIndex = {
   text: string;
@@ -59,11 +63,39 @@ type PageIndex = {
 };
 type Slice = { item: Contents; start: number; end: number };
 // A replaced piece of one item. The replacement text for a whole visual line
-// sits on the line's first piece; `line` lists every piece of that line.
+// sits on the line's first piece; `line` lists every piece of that line and
+// `whole` every piece of the match.
 type ReplaceSlice = Slice & {
   text: string;
   rule: ReplaceText;
   line: ReplaceSlice[];
+  whole: ReplaceSlice[];
+};
+// A text item as displayed; items made by a reflow carry their rule when they
+// hold replacement text.
+type Item = Contents & { rule?: ReplaceText };
+// Items [first, last] on one baseline (canvas px); a wide gap ends a segment
+// so table cells and columns stay apart.
+type Segment = {
+  first: number;
+  last: number;
+  text: boolean;
+  flat: boolean; // upright, unrotated text: the only kind that is reflowed
+  x: number;
+  right: number;
+  y: number;
+  size: number;
+};
+type Rect = { x: number; y: number; w: number; h: number };
+type Colors = { paper: string; ink: string };
+// A paragraph laid out again: new items replace items [first, last], drawn
+// over the `cover` rects that hide the original lines.
+type Flow = {
+  first: number;
+  last: number;
+  items: Item[];
+  cover: Rect[];
+  background?: string;
 };
 // A text box in canvas px, relative to the baseline origin tx[4], tx[5] and
 // rotated by `angle`; `font`/`track` reproduce how the PDF sets that text.
@@ -82,6 +114,8 @@ type Paint = {
   tc: TextContent;
   viewport: any;
   pagePdf: any;
+  base: HTMLCanvasElement;
+  colors: Map<string, Colors>;
 };
 
 const DEFAULT_CDN_PDFJS =
@@ -93,8 +127,27 @@ const DEFAULT_CDN_WORKER =
 const DEFAULT_INTEGRITY =
   "sha512-q+4liFwdPC/bNdhUpZx6aXDx/h77yEQtn4I1slHydcbZK34nLaR3cAeYSJshoxIOq3mjEf7xJE8YWIUHMn+oCQ==";
 
+const PDFJS_DIST = "https://cdn.jsdelivr.net/npm/pdfjs-dist@";
+
 // cdnjs does not serve the cmaps; needed for CJK PDFs using predefined CMaps.
-const CMAP_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/";
+const cMapUrlFor = (lib: any) =>
+  `${PDFJS_DIST}${lib.version || "3.11.174"}/cmaps/`;
+
+// pdf.js refuses a worker from another version, so match the library's.
+const workerFor = (lib: any) => {
+  if (!lib.version) return DEFAULT_CDN_WORKER;
+  const ext = parseInt(lib.version, 10) >= 4 ? "mjs" : "js";
+  return `${PDFJS_DIST}${lib.version}/build/pdf.worker.min.${ext}`;
+};
+
+// Keeps a worker the app configured; otherwise points at a matching one.
+const withWorker = (lib: any) => {
+  const options = lib.GlobalWorkerOptions;
+  if (!options.workerSrc && !options.workerPort) {
+    options.workerSrc = workerFor(lib);
+  }
+  return lib;
+};
 
 const MAX_CANVAS_PIXELS = 8e6; // iOS Safari caps a canvas at 16.7M px
 const MAX_CONCURRENT_RENDERS = 2;
@@ -133,20 +186,23 @@ const sameValue = (a: any, b: any): boolean =>
     a.length === b.length &&
     a.every((x, i) => sameShallow(x, b[i])));
 
-// One shared <script> for every instance; rejects (and allows a retry) on error.
+// pdf.js already on the page: a <script> build or a UMD bundle.
+const globalPdfJs = () => {
+  const g = window.globalThis as any;
+  return g.pdfjsLib || g["pdfjs-dist/build/pdf"];
+};
+
+// The page's pdf.js if it has one, else one shared cdnjs <script> for every
+// instance; rejects (and allows a retry) on error.
 let pdfjsPromise: Promise<any> | undefined;
 const loadPdfJs = (): Promise<any> =>
   (pdfjsPromise ??= new Promise((res, rej) => {
-    const g = window.globalThis as any;
     const ready = () => {
-      const lib = g.pdfjsLib;
+      const lib = globalPdfJs();
       if (!lib) return rej(new Error("pdf.js loaded but pdfjsLib is missing"));
-      if (!lib.GlobalWorkerOptions.workerSrc) {
-        lib.GlobalWorkerOptions.workerSrc = DEFAULT_CDN_WORKER;
-      }
-      res(lib);
+      res(withWorker(lib));
     };
-    if (g.pdfjsLib) return ready();
+    if (globalPdfJs()) return ready();
     const script = document.createElement("script");
     script.src = DEFAULT_CDN_PDFJS;
     script.crossOrigin = "anonymous";
@@ -162,6 +218,7 @@ const loadPdfJs = (): Promise<any> =>
   }));
 
 class PDFHighlight extends Component<Props> {
+  private lib?: any; // the pdf.js in use
   private pdf?: any;
   private loadingTask?: any;
   private refCanvasWrap?: HTMLDivElement | null;
@@ -197,7 +254,7 @@ class PDFHighlight extends Component<Props> {
     const p = this.props;
     const changed = (keys: (keyof Props)[]) =>
       keys.some((k) => !sameValue(prev[k], p[k]));
-    if (prev.url !== p.url) {
+    if (prev.url !== p.url || prev.pdfjs !== p.pdfjs) {
       this.startLoad();
     } else if (changed(RASTER_KEYS)) {
       if (this.pdf) {
@@ -240,17 +297,20 @@ class PDFHighlight extends Component<Props> {
 
   private loadPDf = async (): Promise<boolean> => {
     const req = ++this.loadReq;
-    const { url } = this.props;
+    const { url, pdfjs } = this.props;
     this.releaseDocument();
     if (!url) return false;
     let task: any;
     try {
-      const pdfjsLib = await loadPdfJs();
+      // `import pdfjs from "pdfjs-dist"` may hand over the CommonJS wrapper.
+      const own = pdfjs && (pdfjs.getDocument ? pdfjs : pdfjs.default);
+      const lib = own ? withWorker(own) : await loadPdfJs();
       if (req !== this.loadReq) return false;
-      task = pdfjsLib.getDocument({
+      this.lib = lib;
+      task = lib.getDocument({
         url,
         isEvalSupported: false, // CVE-2024-4367, fixed upstream only in 4.2.67
-        cMapUrl: CMAP_URL,
+        cMapUrl: cMapUrlFor(lib),
         cMapPacked: true,
       });
       this.loadingTask = task;
@@ -455,16 +515,25 @@ class PDFHighlight extends Component<Props> {
 
     const ctx = base.getContext("2d");
     if (!ctx) return;
-    const entry: PageEntry = { pagePdf, div, base, hl, viewport, vp1 };
+    const entry: PageEntry = {
+      pagePdf,
+      div,
+      base,
+      hl,
+      viewport,
+      vp1,
+      colors: new Map(),
+    };
     this.pages.set(page, entry);
-    const textLayer = allowHtml
-      ? this.appendTextToCanvas(entry, page)
-      : undefined;
     const text = this.getText(pagePdf, page); // fetched alongside the render
     entry.task = pagePdf.render({ canvasContext: ctx, viewport });
-    await Promise.all([entry.task.promise, text, textLayer]);
-    // Paint once rendered: pdf.js has loaded the PDF's own fonts by then.
-    await this.paintPage(page, this.paintGen);
+    await Promise.all([entry.task.promise, text]);
+    // Once rendered, pdf.js has loaded the PDF's own fonts, so measured text
+    // (reflowed paragraphs, highlight offsets) matches the page.
+    await Promise.all([
+      allowHtml ? this.appendTextToCanvas(entry, page) : undefined,
+      this.paintPage(page, this.paintGen),
+    ]);
   };
 
   private getText = (pagePdf: any, page: number): Promise<TextContent> => {
@@ -497,16 +566,409 @@ class PDFHighlight extends Component<Props> {
     if (!search && !replaceTexts.length) return;
     const tc = await this.getText(entry.pagePdf, page);
     if (paint !== this.paintGen || this.pages.get(page) !== entry) return;
-    const p: Paint = { ctx, tc, viewport: entry.viewport, pagePdf: entry.pagePdf };
+    const p = this.paintOf(entry, ctx, tc);
     const removes = this.props.specialWordRemoves || [];
-    const original = this.buildIndex(tc.items, removes);
-    const reps = this.planReplacements(original);
+    const { items, reps, flows } = this.layout(p);
     // Replacements first, so highlights stay visible on top of them.
     this.drawReplacements(p, reps, page);
+    flows.forEach((flow) => this.drawFlow(p, flow));
     if (!search) return;
     // Keywords match what is displayed, i.e. the text after replacement.
-    const shown = reps.length ? this.buildIndex(tc.items, removes, reps) : original;
-    this.drawHighlights(p, shown, page);
+    this.drawHighlights(p, this.buildIndex(items, removes, reps), page);
+  };
+
+  private paintOf = (
+    entry: PageEntry,
+    ctx: CanvasRenderingContext2D,
+    tc: TextContent
+  ): Paint => ({
+    ctx,
+    tc,
+    viewport: entry.viewport,
+    pagePdf: entry.pagePdf,
+    base: entry.base,
+    colors: entry.colors,
+  });
+
+  // What the page shows: the PDF's items plus replaceTexts. A replacement too
+  // long for its place is flowed into its paragraph like typed text (those
+  // paragraphs become new items); otherwise it is drawn in place.
+  private layout = (p: Paint) => {
+    const items: Item[] = p.tc.items;
+    const original = this.buildIndex(items, this.props.specialWordRemoves || []);
+    const reps = this.planReplacements(original);
+    const flows: Flow[] = [];
+    const long = reps.filter((r) => r === r.line[0] && this.overflows(p, r));
+    if (!long.length) return { items, reps, flows };
+    const at = new Map<Contents, number>();
+    items.forEach((item, i) => at.set(item, i));
+    const segs = this.segments(p);
+    const flowed = new Set<ReplaceSlice>();
+    this.paragraphs(segs).forEach((para) => {
+      const lo = para[0].first;
+      const hi = para[para.length - 1].last;
+      const inside = (r: ReplaceSlice) => {
+        const i = at.get(r.item) as number;
+        return i >= lo && i <= hi;
+      };
+      if (!long.some(inside)) return;
+      const mine = reps.filter(inside);
+      if (mine.some((r) => !r.whole.every(inside))) return; // match leaves it
+      const flow = this.flow(p, para, mine, segs, at);
+      if (!flow) return; // needs more lines than it has: drawn scaled instead
+      flows.push(flow);
+      mine.forEach((r) => flowed.add(r));
+    });
+    if (!flows.length) return { items, reps, flows };
+    const shown: Item[] = [];
+    let i = 0;
+    flows
+      .sort((a, b) => a.first - b.first)
+      .forEach((flow) => {
+        while (i < flow.first) shown.push(items[i++]);
+        flow.items.forEach((item) => shown.push(item));
+        i = flow.last + 1;
+      });
+    while (i < items.length) shown.push(items[i++]);
+    return { items: shown, reps: reps.filter((r) => !flowed.has(r)), flows };
+  };
+
+  private overflows = (p: Paint, lead: ReplaceSlice) => {
+    if (!lead.text) return false;
+    const b = this.lineBox(p, lead.line);
+    p.ctx.save();
+    const k = this.useFont(p.ctx, b, lead.text);
+    p.ctx.restore();
+    return k < 0.99;
+  };
+
+  private segments = (p: Paint): Segment[] => {
+    const { Util } = this.lib;
+    const out: Segment[] = [];
+    p.tc.items.forEach((item, i) => {
+      const cur = out[out.length - 1];
+      if (!item.str || !item.str.trim()) {
+        if (cur) cur.last = i;
+        else out.push({ first: i, last: i, text: false, flat: false, x: 0, right: 0, y: 0, size: 0 });
+        return;
+      }
+      const tx: number[] = Util.transform(p.viewport.transform, item.transform);
+      const flat =
+        Math.abs(tx[1]) < 1e-6 && Math.abs(tx[2]) < 1e-6 && tx[0] > 0 && tx[3] < 0;
+      const x = tx[4];
+      const right = x + item.width * p.viewport.scale;
+      const size = Math.abs(tx[3]);
+      if (cur && !cur.text) {
+        Object.assign(cur, { last: i, text: true, flat, x, right, y: tx[5], size });
+      } else if (
+        cur &&
+        cur.flat &&
+        flat &&
+        Math.abs(tx[5] - cur.y) < cur.size / 2 &&
+        x - cur.right < cur.size * 2
+      ) {
+        cur.last = i;
+        cur.right = Math.max(cur.right, right);
+      } else {
+        out.push({ first: i, last: i, text: true, flat, x, right, y: tx[5], size });
+      }
+    });
+    return out;
+  };
+
+  // Consecutive segments that read as one paragraph: same size, steady line
+  // spacing, aligned left edges and no short line before the last one.
+  private paragraphs = (segs: Segment[]): Segment[][] => {
+    const out: Segment[][] = [];
+    let para: Segment[] = [];
+    let step = 0;
+    segs.forEach((s) => {
+      const prev = para[para.length - 1];
+      const d = prev ? s.y - prev.y : 0;
+      const widest = para.reduce((m, o) => Math.max(m, o.right), s.right);
+      const joins =
+        !!prev &&
+        prev.flat &&
+        s.flat &&
+        prev.text &&
+        s.text &&
+        Math.abs(s.size - prev.size) <= prev.size * 0.1 &&
+        d > prev.size * 0.9 &&
+        d < prev.size * 2.5 &&
+        (!step || Math.abs(d - step) <= step * 0.25) &&
+        Math.abs(s.x - para[0].x) <= prev.size * 3 &&
+        prev.right >= widest - prev.size * 3;
+      if (joins) {
+        step = step || d;
+        para.push(s);
+      } else {
+        if (para.length) out.push(para);
+        para = [s];
+        step = 0;
+      }
+    });
+    if (para.length) out.push(para);
+    return out;
+  };
+
+  // Lays a paragraph out again from its first replaced line, like typed text:
+  // words wrap at the column edge and justified text stays justified. Returns
+  // nothing when the text needs more lines than the paragraph has.
+  private flow = (
+    p: Paint,
+    para: Segment[],
+    mine: ReplaceSlice[],
+    segs: Segment[],
+    at: Map<Contents, number>
+  ): Flow | undefined => {
+    const { ctx, tc } = p;
+    const items = tc.items;
+    const size = para[0].size;
+    const left = para.reduce((m, s) => Math.min(m, s.x), Infinity);
+    // The column's right edge, also judged from other lines of the column.
+    const right = segs
+      .filter(
+        (s) =>
+          s.flat &&
+          s.text &&
+          Math.abs(s.x - left) <= size * 3 &&
+          Math.abs(s.size - size) <= size * 0.1
+      )
+      .reduce((m, s) => Math.max(m, s.right), 0);
+    const justified =
+      para.length > 1 && para.slice(0, -1).every((s) => s.right >= right - s.size);
+    const holds = (s: Segment) =>
+      mine.some((r) => {
+        const i = at.get(r.item) as number;
+        return i >= s.first && i <= s.last;
+      });
+    const lines = para.slice(para.findIndex(holds));
+
+    // The text from the first replaced line on, with the replacements in place.
+    type Part = { text: string; item: Contents; rule?: ReplaceText; w: number };
+    const pieces = new Map<Contents, ReplaceSlice[]>();
+    mine.forEach((r) => pieces.set(r.item, (pieces.get(r.item) || []).concat(r)));
+    const parts: Part[] = [];
+    const add = (text: string, item: Contents, rule?: ReplaceText) =>
+      parts.push({ text, item, rule, w: 0 });
+    lines.forEach((s) => {
+      for (let i = s.first; i <= s.last; i++) {
+        const item = items[i];
+        let pos = 0;
+        (pieces.get(item) || [])
+          .sort((a, b) => a.start - b.start)
+          .forEach((r) => {
+            add(item.str.slice(pos, r.start), item);
+            if (r === r.whole[0]) add(r.rule.replace || "", item, r.rule);
+            pos = r.end;
+          });
+        add(item.str.slice(pos), item);
+      }
+      add(" ", items[s.last]); // a line break reads as a space
+    });
+
+    // Words, each part measured in its source item's font and spacing.
+    const boxes = new Map<Contents, Box>();
+    const boxOf = (item: Contents) => {
+      let b = boxes.get(item);
+      if (!b) boxes.set(item, (b = this.sliceBox(p, { item, start: 0, end: 0 })));
+      return b;
+    };
+    const words: Part[][] = [];
+    let word: Part[] | undefined;
+    parts.forEach((part) => {
+      part.text.split(/(\s+)/).forEach((t) => {
+        if (!t) return;
+        if (/^\s/.test(t)) {
+          word = undefined;
+          return;
+        }
+        if (!word) words.push((word = []));
+        const b = boxOf(part.item);
+        ctx.font = b.font;
+        word.push({ ...part, text: t, w: ctx.measureText(t).width + b.track * t.length });
+      });
+    });
+    const widthOf = (w: Part[]) => w.reduce((n, part) => n + part.w, 0);
+    let space = 0;
+    if (words.length) {
+      ctx.font = boxOf(words[0][0].item).font;
+      space = ctx.measureText(" ").width;
+    }
+
+    // Fill the original baselines greedily.
+    const rows: Part[][][] = [[]];
+    let x = lines[0].x;
+    for (const w of words) {
+      const wide = widthOf(w);
+      let row = rows[rows.length - 1];
+      if (row.length && x + space + wide > right) {
+        if (rows.length === lines.length) return undefined;
+        rows.push((row = []));
+        x = lines[rows.length - 1].x;
+      } else if (row.length) {
+        x += space;
+      }
+      if (x + wide > right + 0.5) return undefined; // a word wider than a line
+      row.push(w);
+      x += wide;
+    }
+
+    const out: Item[] = [];
+    const make = (part: Part, x: number, y: number): Item => {
+      const [px, py] = p.viewport.convertToPdfPoint(x, y);
+      const t = part.item.transform;
+      return {
+        str: part.text,
+        dir: "ltr",
+        width: part.w / p.viewport.scale,
+        height: part.item.height,
+        transform: [t[0], t[1], t[2], t[3], px, py],
+        fontName: part.item.fontName,
+        hasEOL: false,
+        rule: part.rule,
+      };
+    };
+    rows.forEach((row, n) => {
+      const line = lines[n];
+      const used = row.reduce((m, w) => m + widthOf(w), 0) + space * (row.length - 1);
+      const gap =
+        justified && n < rows.length - 1 && row.length > 1
+          ? space + (right - line.x - used) / (row.length - 1)
+          : space;
+      let cx = line.x;
+      row.forEach((w, j) => {
+        w.forEach((part) => {
+          out.push(make(part, cx, line.y));
+          cx += part.w;
+        });
+        if (j === row.length - 1) return;
+        // Spaces are not drawn; they keep copied text readable.
+        out.push(make({ text: " ", item: w[w.length - 1].item, w: gap }, cx, line.y));
+        cx += gap;
+      });
+    });
+
+    const cover = lines.map((s) => {
+      const first = items
+        .slice(s.first, s.last + 1)
+        .find((it) => !!it.str && !!it.str.trim()) as Contents;
+      const style = tc.styles[first.fontName];
+      const asc = style && style.ascent > 0 ? style.ascent : 0.8;
+      const desc = style && style.descent < 0 ? style.descent : -0.2;
+      const pad = s.size * 0.05;
+      return {
+        x: s.x - pad,
+        y: s.y - asc * s.size - pad,
+        w: right - s.x + 2 * pad,
+        h: (asc - desc) * s.size + 2 * pad,
+      };
+    });
+    return {
+      first: lines[0].first,
+      last: lines[lines.length - 1].last,
+      items: out,
+      cover,
+      background: mine[0].rule.background,
+    };
+  };
+
+  private drawFlow = (p: Paint, flow: Flow) => {
+    const { ctx } = p;
+    const { paper, ink } = this.colorsAt(p, flow.cover);
+    ctx.save();
+    ctx.fillStyle = flow.background || paper;
+    flow.cover.forEach((r) => ctx.fillRect(r.x, r.y, r.w, r.h));
+    ctx.textBaseline = "alphabetic";
+    const marks: Slice[][] = [];
+    let run: Slice[] | undefined;
+    flow.items.forEach((item) => {
+      if (!item.str.trim()) return;
+      const slice = { item, start: 0, end: item.str.length };
+      const b = this.sliceBox(p, slice); // also sets ctx.font
+      ctx.save();
+      if ("letterSpacing" in ctx) (ctx as any).letterSpacing = `${b.track}px`;
+      ctx.fillStyle = (item.rule && item.rule.color) || ink;
+      ctx.fillText(item.str, b.tx[4], b.tx[5]);
+      ctx.restore();
+      if (!item.rule) {
+        run = undefined;
+      } else {
+        if (!run) marks.push((run = []));
+        run.push(slice);
+      }
+    });
+    // Replacement text is marked like a keyword match, one band per line.
+    marks.forEach((m) =>
+      this.lines(m).forEach((line) => {
+        const b = this.mergeBoxes(line.map((s) => this.sliceBox(p, s)));
+        ctx.save();
+        ctx.translate(b.tx[4], b.tx[5]);
+        this.mark(ctx, b.x0, b.y, b.w, b.h);
+        ctx.restore();
+      })
+    );
+    ctx.restore();
+  };
+
+  // Paper and ink of a region of the rendered page, so drawn text blends in:
+  // the most common color is the paper, the one farthest from it the ink.
+  private colorsAt = (p: Paint, rects: Rect[]): Colors => {
+    const x0 = Math.max(0, Math.floor(Math.min(...rects.map((r) => r.x))));
+    const y0 = Math.max(0, Math.floor(Math.min(...rects.map((r) => r.y))));
+    const x1 = Math.min(p.base.width, Math.ceil(Math.max(...rects.map((r) => r.x + r.w))));
+    const y1 = Math.min(p.base.height, Math.ceil(Math.max(...rects.map((r) => r.y + r.h))));
+    const key = [x0, y0, x1, y1].join();
+    let colors = p.colors.get(key);
+    if (colors) return colors;
+    colors = { paper: "#fff", ink: "#000" };
+    try {
+      const ctx = p.base.getContext("2d");
+      if (ctx && x1 > x0 && y1 > y0) {
+        const { data } = ctx.getImageData(x0, y0, x1 - x0, y1 - y0);
+        const counts = new Map<number, number>();
+        let paper = 0xffffff;
+        let most = 0;
+        for (let i = 0; i < data.length; i += 8) {
+          const c = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
+          const n = (counts.get(c) || 0) + 1;
+          counts.set(c, n);
+          if (n > most) {
+            most = n;
+            paper = c;
+          }
+        }
+        const diff = (c: number) =>
+          [16, 8, 0].reduce((d, s) => d + Math.abs(((c >> s) & 255) - ((paper >> s) & 255)), 0);
+        let ink = paper;
+        counts.forEach((_, c) => {
+          if (diff(c) > diff(ink)) ink = c;
+        });
+        const css = (c: number) => `#${(c | 0x1000000).toString(16).slice(1)}`;
+        colors = { paper: css(paper), ink: css(ink) };
+      }
+    } catch {
+      // keep the defaults
+    }
+    p.colors.set(key, colors);
+    return colors;
+  };
+
+  // Axis-aligned canvas rect around a (possibly rotated) box.
+  private rectOf = (b: Box): Rect => {
+    const cos = Math.cos(b.angle);
+    const sin = Math.sin(b.angle);
+    const xs: number[] = [];
+    const ys: number[] = [];
+    [b.x0, b.x0 + b.w].forEach((u) =>
+      [b.y, b.y + b.h].forEach((v) => {
+        xs.push(b.tx[4] + u * cos - v * sin);
+        ys.push(b.tx[5] + u * sin + v * cos);
+      })
+    );
+    const x = Math.min(...xs);
+    const y = Math.min(...ys);
+    return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
   };
 
   // The font pdf.js drew the item with: the PDF's embedded font (a FontFace
@@ -530,7 +992,7 @@ class PDFHighlight extends Component<Props> {
   // Box of item.str[start, end). Browser widths are scaled onto the exact PDF
   // advance (item.width); `track` is the extra spacing per char the PDF adds.
   private sliceBox = (p: Paint, { item, start, end }: Slice): Box => {
-    const { Util } = (window.globalThis as any).pdfjsLib;
+    const { Util } = this.lib;
     const style = p.tc.styles[item.fontName];
     const tx: number[] = Util.transform(p.viewport.transform, item.transform);
     const fontH = Math.hypot(tx[2], tx[3]);
@@ -648,13 +1110,14 @@ class PDFHighlight extends Component<Props> {
       ctx.save();
       const b = this.lineBox(p, part.line);
       const pad = b.h * 0.05; // hide anti-aliased edges of the original glyphs
+      const { paper, ink } = this.colorsAt(p, [this.rectOf(b)]);
       ctx.translate(b.tx[4], b.tx[5]);
       ctx.rotate(b.angle);
-      ctx.fillStyle = part.rule.background || "#fff";
+      ctx.fillStyle = part.rule.background || paper;
       ctx.fillRect(b.x0 - pad, b.y - pad, b.w + 2 * pad, b.h + 2 * pad);
       if (part.text && b.w > 0) {
         const k = this.useFont(ctx, b, part.text);
-        ctx.fillStyle = part.rule.color || "#000";
+        ctx.fillStyle = part.rule.color || ink;
         ctx.textBaseline = "alphabetic";
         // A longer replacement is scaled down evenly on its baseline to fit,
         // never squeezed horizontally.
@@ -709,6 +1172,7 @@ class PDFHighlight extends Component<Props> {
         taken.fill(1, from, to);
         const lines = this.lines(this.slices(index, from, to));
         const total = lines.reduce((n, l) => n + size(l), 0);
+        const whole: ReplaceSlice[] = [];
         let acc = 0;
         let pos = 0;
         lines.forEach((l, i) => {
@@ -721,10 +1185,19 @@ class PDFHighlight extends Component<Props> {
           pos = cut;
           const line: ReplaceSlice[] = [];
           l.forEach((s, j) => {
-            const piece = { item: s.item, start: s.start, end: s.end, rule, line };
-            line.push({ ...piece, text: j ? "" : chunk });
+            const piece: ReplaceSlice = {
+              item: s.item,
+              start: s.start,
+              end: s.end,
+              text: j ? "" : chunk,
+              rule,
+              line,
+              whole,
+            };
+            line.push(piece);
+            whole.push(piece);
+            out.push(piece);
           });
-          line.forEach((piece) => out.push(piece));
         });
       });
     });
@@ -869,19 +1342,16 @@ class PDFHighlight extends Component<Props> {
   // Transparent, selectable text positioned in % of the page, so it follows
   // CSS resizes without re-layout. Rebuilding replaces the previous layer.
   private appendTextToCanvas = async (entry: PageEntry, page: number) => {
-    const { items, styles } = await this.getText(entry.pagePdf, page);
-    if (this.pages.get(page) !== entry) return; // evicted or superseded
-    const { Util } = (window.globalThis as any).pdfjsLib;
-    const { replaceTexts = [], specialWordRemoves = [] } = this.props;
+    const tc = await this.getText(entry.pagePdf, page);
+    const ctx = entry.hl.getContext("2d");
+    if (this.pages.get(page) !== entry || !ctx) return; // evicted or superseded
+    const { Util } = this.lib;
+    const { styles } = tc;
     const vp1 = entry.vp1;
-    // Selected/copied text shows the replacements too.
+    // Selected/copied text is what is displayed: replaced and reflowed.
+    const { items, reps } = this.layout(this.paintOf(entry, ctx, tc));
     const edits = new Map<Contents, ReplaceSlice[]>();
-    if (replaceTexts.length) {
-      const index = this.buildIndex(items, specialWordRemoves);
-      this.planReplacements(index).forEach((r) => {
-        edits.set(r.item, (edits.get(r.item) || []).concat(r));
-      });
-    }
+    reps.forEach((r) => edits.set(r.item, (edits.get(r.item) || []).concat(r)));
     const layer = document.createElement("div");
     layer.style.cssText =
       "position:absolute;left:0;top:0;right:0;bottom:0;overflow:hidden;line-height:1;container-type:inline-size";
