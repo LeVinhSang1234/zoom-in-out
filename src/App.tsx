@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import PDFHighlight from "./packages/PDFHighlight";
 
 const PDF_URL = "https://pdfobject.com/pdf/sample.pdf";
@@ -7,6 +7,7 @@ function App() {
   const [keyword, setKeyword] = useState("velit");
   const [search, setSearch] = useState("Lorem ipsum");
   const [replace, setReplace] = useState("Hello world");
+  const viewer = useRef<PDFHighlight>(null);
 
   // Typing only repaints the highlight overlay; pages are not re-rendered.
   return (
@@ -19,6 +20,7 @@ function App() {
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
         />
+        <button onClick={() => viewer.current?.scrollToMatch()}>Find</button>
         <input
           placeholder="Replace text"
           value={search}
@@ -31,6 +33,7 @@ function App() {
         />
       </div>
       <PDFHighlight
+        ref={viewer}
         url={PDF_URL}
         allowHtml
         debug

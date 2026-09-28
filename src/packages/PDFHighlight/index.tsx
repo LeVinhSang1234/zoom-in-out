@@ -29,18 +29,13 @@ interface Props {
   keywords?: string[];
   colorHighlight?: string;
   colorKeyword?: string;
-  keywordSolid?: boolean;
-  ignoreCase?: boolean;
   isBorderHighlight?: boolean;
   styleWrap?: CSSProperties;
   debug?: boolean;
   allowHtml?: boolean;
   specialWordRemoves?: string[];
   maxKeywordLength?: number;
-  // Display-only: the PDF file and pdf.js text extraction keep the original.
   replaceTexts?: ReplaceText[];
-  // The app's own pdf.js (e.g. `import * as pdfjs from "pdfjs-dist"`). Without
-  // it a global pdfjsLib is reused, else pdf.js 3.11.174 comes from cdnjs.
   pdfjs?: any;
 }
 
@@ -64,9 +59,34 @@ interface PageEntry {
   task?: any;
   textLayer?: HTMLDivElement;
   colors: Map<string, Colors>; // sampled from the rendered page, by region
+  ready?: boolean; // rendered, so the PDF's fonts are loaded for measuring
+  lastPaint?: { gen: number; p: Paint; shown: PageIndex };
+  laid?: Laid; // layout for the current textGen (only once fonts are loaded)
+  hlKey?: string; // what the hl overlay was drawn for
+}
+interface Laid {
+  gen: number;
+  tc: TextContent;
+  items: Item[];
+  reps: ReplaceSlice[];
+  flows: Flow[];
+  original: PageIndex;
+  shown?: PageIndex;
+}
+interface ItemMetrics {
+  tx: number[];
+  angle: number;
+  fontH: number;
+  asc: number;
+  desc: number;
+  font: string;
+  raw: number;
+  k: number;
+  track: number;
 }
 interface PageIndex {
   text: string;
+  lower: string; // text lowercased char by char, so offsets still line up
   item: number[];
   off: number[];
   rep: number[]; // -1 for PDF text, else the index into reps
@@ -148,6 +168,7 @@ interface Paint {
   base: HTMLCanvasElement;
   colors: Map<string, Colors>;
   dyAt: (x: number, y: number) => number;
+  metrics: Map<Contents, ItemMetrics>;
 }
 
 const DEFAULT_CDN_PDFJS =
@@ -173,6 +194,59 @@ const workerFor = (lib: any) => {
 };
 
 // Keeps a worker the app configured; otherwise points at a matching one.
+// Lowercase keeping the length (a char whose lowercase is longer stays as is).
+const lowerEach = (s: string) =>
+  s
+    .split("")
+    .map((c) => {
+      const l = c.toLowerCase();
+      return l.length === 1 ? l : c;
+    })
+    .join("");
+// Whole-string toLowerCase gives the same text unless a char lowercases to two
+// units (length changes), a Sigma (final-form rule) or a surrogate is present.
+const lowerChars = (s: string) => {
+  const l = s.toLowerCase();
+  return l.length === s.length && !/[\u03a3\ud800-\udfff]/.test(s)
+    ? l
+    : lowerEach(s);
+};
+// Exactly the chars /\s/ matches.
+const isSpace = (c: number) =>
+  c <= 32
+    ? c === 32 || (c >= 9 && c <= 13)
+    : c >= 0xa0 &&
+      (c === 0xa0 ||
+        c === 0x1680 ||
+        (c >= 0x2000 && c <= 0x200a) ||
+        c === 0x2028 ||
+        c === 0x2029 ||
+        c === 0x202f ||
+        c === 0x205f ||
+        c === 0x3000 ||
+        c === 0xfeff);
+
+let colorCtx: CanvasRenderingContext2D | null | undefined;
+// A CSS color as the canvas normalizes it ("#rrggbb" or "rgba(...)").
+const normColor = (color: string) => {
+  colorCtx = colorCtx || document.createElement("canvas").getContext("2d");
+  if (!colorCtx) return color;
+  colorCtx.fillStyle = "#000";
+  colorCtx.fillStyle = color;
+  return String(colorCtx.fillStyle);
+};
+// The same color at 70% brightness.
+const darker = (color: string) => {
+  const c = normColor(color);
+  const hex = /^#([0-9a-f]{6})$/i.exec(c);
+  const rgb = hex
+    ? [16, 8, 0].map((s) => (parseInt(hex[1], 16) >> s) & 255)
+    : (c.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+  if (rgb.length < 3) return color;
+  const [r, g, b] = rgb.map((v) => Math.round(v * 0.7));
+  return `rgb(${r}, ${g}, ${b})`;
+};
+
 const withWorker = (lib: any) => {
   const options = lib.GlobalWorkerOptions;
   if (!options.workerSrc && !options.workerPort) {
@@ -203,8 +277,6 @@ const HIGHLIGHT_KEYS: (keyof Props)[] = [
   "keywords",
   "colorHighlight",
   "colorKeyword",
-  "keywordSolid",
-  "ignoreCase",
   "isBorderHighlight",
   "pageSearch",
   "specialWordRemoves",
@@ -213,6 +285,15 @@ const HIGHLIGHT_KEYS: (keyof Props)[] = [
 ];
 // Props that change the page bitmaps.
 const RASTER_KEYS: (keyof Props)[] = ["scale", "page", "allowHtml"];
+const USER_SCROLL_EVENTS = ["wheel", "touchstart", "pointerdown", "keydown"];
+// A change scrolls to the first match (replaceTexts edits do not).
+const SEARCH_KEYS: (keyof Props)[] = [
+  "keywords",
+  "pageSearch",
+  "page",
+  "specialWordRemoves",
+  "maxKeywordLength",
+];
 
 const sameShallow = (a: any, b: any): boolean =>
   a === b ||
@@ -241,14 +322,20 @@ const globalPdfJs = () => {
 // The page's pdf.js if it has one, else one shared cdnjs <script> for every
 // instance; rejects (and allows a retry) on error.
 let pdfjsPromise: Promise<any> | undefined;
+let pdfjsFrom = ""; // "global" or "cdnjs", for debug output
+let instances = 0;
 const loadPdfJs = (): Promise<any> =>
   (pdfjsPromise ??= new Promise((res, rej) => {
     const ready = () => {
       const lib = globalPdfJs();
       if (!lib) return rej(new Error("pdf.js loaded but pdfjsLib is missing"));
+      pdfjsFrom = pdfjsFrom || "cdnjs";
       res(withWorker(lib));
     };
-    if (globalPdfJs()) return ready();
+    if (globalPdfJs()) {
+      pdfjsFrom = "global";
+      return ready();
+    }
     const script = document.createElement("script");
     script.src = DEFAULT_CDN_PDFJS;
     script.crossOrigin = "anonymous";
@@ -261,9 +348,19 @@ const loadPdfJs = (): Promise<any> =>
       rej(new Error(`Failed to load pdf.js from ${DEFAULT_CDN_PDFJS}`));
     };
     document.head.appendChild(script);
+    // Warm the HTTP cache with the worker (1 MB) meanwhile, instead of pdf.js
+    // starting that download only once this script has run.
+    if (typeof fetch === "function") {
+      fetch(workerFor({ version: "3.11.174" }), { mode: "no-cors" }).catch(
+        () => undefined,
+      );
+    }
   }));
 
 class PDFHighlight extends Component<Props> {
+  private tag = `[PDFHighlight#${++instances}]`;
+  private warned = new Set<string>();
+  private failed = new Set<number>(); // pages not retried until scrolled in again
   private lib?: any; // the pdf.js in use
   private pdf?: any;
   private loadingTask?: any;
@@ -271,6 +368,7 @@ class PDFHighlight extends Component<Props> {
   private resizeObserver?: ResizeObserver;
   private observer?: IntersectionObserver;
   private timeoutRender?: ReturnType<typeof setTimeout>;
+  private textTimer?: ReturnType<typeof setTimeout>;
   private loadReq = 0;
   private renderGen = 0;
   private paintGen = 0;
@@ -281,8 +379,14 @@ class PDFHighlight extends Component<Props> {
   private active = new Set<number>(); // pages with a render in flight
   private pages = new Map<number, PageEntry>(); // pages that have canvases
   private textCache = new Map<number, Promise<TextContent>>();
+  private textGen = 0; // bumped when replaceTexts / specialWordRemoves change
+  private searchText = new Map<number, string>(); // page -> lowercased shown text
   private onIdle?: (error?: any) => void;
   private pageError?: any;
+  private scrollReq = 0;
+  private pendingScroll?: { page: number; req: number };
+  private scrollOnLayout = false;
+  private marker?: HTMLDivElement;
 
   componentDidMount(): void {
     this.unmounted = false; // StrictMode re-mounts the same instance
@@ -294,12 +398,19 @@ class PDFHighlight extends Component<Props> {
     } else {
       window.addEventListener("resize", this.loadResize);
     }
+    USER_SCROLL_EVENTS.forEach((type) =>
+      wrap?.addEventListener(type, this.cancelScroll, { passive: true }),
+    );
   }
 
   componentDidUpdate(prev: Props): void {
     const p = this.props;
     const changed = (keys: (keyof Props)[]) =>
       keys.some((k) => !sameValue(prev[k], p[k]));
+    if (changed(["replaceTexts", "specialWordRemoves"])) {
+      ++this.textGen;
+      this.searchText.clear();
+    }
     if (prev.url !== p.url || prev.pdfjs !== p.pdfjs) {
       this.startLoad();
     } else if (changed(RASTER_KEYS)) {
@@ -310,35 +421,75 @@ class PDFHighlight extends Component<Props> {
     } else if (changed(HIGHLIGHT_KEYS)) {
       this.repaintHighlights();
       if (p.allowHtml && changed(["replaceTexts", "specialWordRemoves"])) {
-        this.pages.forEach((entry, page) => {
-          this.appendTextToCanvas(entry, page).catch(() => undefined);
-        });
+        // Rebuilt once typing in the replace inputs pauses.
+        if (this.textTimer) clearTimeout(this.textTimer);
+        this.textTimer = setTimeout(() => {
+          this.textTimer = undefined;
+          if (this.unmounted || !this.props.allowHtml) return;
+          this.pages.forEach((entry, page) => {
+            this.appendTextToCanvas(entry, page).catch((e) =>
+              this.fail(`text layer ${page}`, e, page),
+            );
+          });
+        }, 150);
       }
     }
     // width / styleWrap are CSS only; the ResizeObserver re-rasterizes if needed.
+    if (changed(SEARCH_KEYS)) this.scrollToMatch();
   }
 
   componentWillUnmount(): void {
     this.unmounted = true;
     ++this.loadReq;
     if (this.timeoutRender) clearTimeout(this.timeoutRender);
+    if (this.textTimer) clearTimeout(this.textTimer);
     this.resizeObserver?.disconnect();
     this.resizeObserver = undefined;
     window.removeEventListener("resize", this.loadResize);
+    USER_SCROLL_EVENTS.forEach((type) =>
+      this.refCanvasWrap?.removeEventListener(type, this.cancelScroll),
+    );
     this.releaseDocument();
     // The pdf.js <script> stays: other and future instances reuse it.
   }
 
+  // Debug output: with debug off the call and its arguments are skipped.
+  private get log(): Console | undefined {
+    return this.props.debug ? console : undefined;
+  }
+
+  private warnOnce = (key: string, ...args: any[]) => {
+    if (this.warned.has(key)) return;
+    this.warned.add(key);
+    console.warn(this.tag, ...args);
+  };
+
+  // A real failure outside the load path: not a cancellation, and not a page
+  // that went away meanwhile.
+  private fail = (key: string, e: any, page?: number) => {
+    if (this.isCancelled(e)) return;
+    if (page !== undefined && !this.pages.has(page)) return;
+    this.warnOnce(key, e);
+  };
+
+  // Reads onLoaded when called; an error nobody handles is still printed.
+  private loaded = (error?: any) => {
+    const { onLoaded, debug } = this.props;
+    if (error && (!onLoaded || debug)) console.error(this.tag, error);
+    onLoaded?.(error);
+  };
+
   private startLoad = () => {
-    const { url, onStartLoad, onLoaded } = this.props;
+    const { url, onStartLoad } = this.props;
     if (!url) {
       this.loadPDf().catch(() => undefined); // only releases the old document
       return;
     }
     onStartLoad?.();
+    this.scrollOnLayout = true;
     this.loadPDf()
       .then((ok) => (ok ? this.renderPage() : undefined))
-      .catch((e) => onLoaded?.(e));
+      .catch(this.loaded);
   };
 
   private loadPDf = async (): Promise<boolean> => {
@@ -346,10 +497,14 @@ class PDFHighlight extends Component<Props> {
     const { url, pdfjs } = this.props;
     this.releaseDocument();
     if (!url) return false;
+    const start = Date.now();
     let task: any;
     try {
       // `import pdfjs from "pdfjs-dist"` may hand over the CommonJS wrapper.
       const own = pdfjs && (pdfjs.getDocument ? pdfjs : pdfjs.default);
+      if (pdfjs && !own) {
+        this.warnOnce("pdfjs", "the pdfjs prop has no getDocument; using cdnjs");
+      }
       const lib = own ? withWorker(own) : await loadPdfJs();
       if (req !== this.loadReq) return false;
       this.lib = lib;
@@ -363,6 +518,14 @@ class PDFHighlight extends Component<Props> {
       const pdf = await task.promise;
       if (req !== this.loadReq) return false;
       this.pdf = pdf;
+      const worker = lib.GlobalWorkerOptions;
+      this.log?.info(this.tag, "loaded", {
+        pdfjs: lib.version,
+        from: own ? "prop" : pdfjsFrom,
+        worker: worker.workerPort ? "workerPort" : worker.workerSrc,
+        pages: pdf.numPages,
+        ms: Date.now() - start,
+      });
       return true;
     } catch (e) {
       if (req !== this.loadReq) return false; // superseded or unmounted
@@ -372,7 +535,12 @@ class PDFHighlight extends Component<Props> {
 
   private releaseDocument = () => {
     this.resetPages();
+    ++this.scrollReq;
+    this.pendingScroll = undefined;
+    this.warned.clear();
+    this.renderedWidth = 0;
     this.textCache.clear();
+    this.searchText.clear();
     this.pdf = undefined;
     // Terminates this document's Web Worker and unregisters its fonts.
     this.loadingTask?.destroy().catch(() => undefined);
@@ -390,6 +558,7 @@ class PDFHighlight extends Component<Props> {
     this.slots.clear();
     this.visible.clear();
     this.active.clear();
+    this.failed.clear();
     this.pageError = undefined;
     // Let a pending renderPage settle; its generation check skips onLoaded.
     this.onIdle?.();
@@ -421,8 +590,9 @@ class PDFHighlight extends Component<Props> {
       // (scrollbars, the iOS toolbar). Re-rasterize only when the bitmap would
       // be visibly soft (>10% upscale) or badly oversized.
       if (ratio && ratio <= 1.1 && ratio >= 0.75) return;
-      if (this.props.debug) console.info("[PDFHighlight] resize", w);
-      this.props.onStartLoad?.();
+      this.log?.info(this.tag, "resize", w);
+      // A render still owed (e.g. loaded while hidden) already signalled start.
+      if (this.renderedWidth) this.props.onStartLoad?.();
       this.renderPage();
     }, 150);
   };
@@ -434,10 +604,19 @@ class PDFHighlight extends Component<Props> {
   private renderPage = async () => {
     const pdf = this.pdf; // capture once: never switch documents mid-pass
     const wrap = this.refCanvasWrap;
-    if (!pdf || !wrap || !wrap.clientWidth) return;
+    if (!pdf || !wrap) return;
+    if (!wrap.clientWidth) {
+      // Hidden (display:none tab or modal): render once it gets a width.
+      this.renderedWidth = 0;
+      this.log?.info(this.tag, "hidden, rendering when shown");
+      return;
+    }
     this.resetPages();
     const gen = this.renderGen;
-    const { onLoaded, page } = this.props;
+    const { page, pageSearch } = this.props;
+    if (pageSearch && (pageSearch < 1 || pageSearch > pdf.numPages)) {
+      this.log?.warn(this.tag, "pageSearch", pageSearch, "is not a page of 1 to", pdf.numPages);
+    }
     try {
       const nums = page
         ? [page]
@@ -464,10 +643,14 @@ class PDFHighlight extends Component<Props> {
       wrap.appendChild(frag);
       if (keep) wrap.scrollTop = keep * wrap.scrollHeight;
       this.renderedWidth = wrap.clientWidth;
+      if (this.scrollOnLayout) {
+        this.scrollOnLayout = false;
+        this.scrollToMatch();
+      }
       const error = await this.observePages(wrap, gen);
-      if (gen === this.renderGen) onLoaded?.(error);
+      if (gen === this.renderGen) this.loaded(error);
     } catch (e) {
-      if (gen === this.renderGen && !this.isCancelled(e)) onLoaded?.(e);
+      if (gen === this.renderGen && !this.isCancelled(e)) this.loaded(e);
     }
   };
 
@@ -489,7 +672,10 @@ class PDFHighlight extends Component<Props> {
             if (e.isIntersecting) {
               this.visible.add(n);
             } else {
-              this.visible.delete(n);
+              if (this.visible.delete(n) && this.pendingScroll?.page === n) {
+                this.pendingScroll = undefined;
+              }
+              this.failed.delete(n); // retried when it comes back
               this.evict(n);
             }
           });
@@ -502,9 +688,13 @@ class PDFHighlight extends Component<Props> {
     });
 
   // Starts renders for visible pages, at most MAX_CONCURRENT_RENDERS at once.
+  // In page order: a page above grows (reflow) before the ones below it are
+  // painted, so a scroll to a match lands where it should.
   private pump = (gen: number) => {
     const queue = Array.from(this.visible)
-      .filter((n) => !this.pages.has(n) && !this.active.has(n))
+      .filter(
+        (n) => !this.pages.has(n) && !this.active.has(n) && !this.failed.has(n),
+      )
       .sort((a, b) => a - b);
     while (this.active.size < MAX_CONCURRENT_RENDERS && queue.length) {
       const n = queue.shift() as number;
@@ -512,12 +702,14 @@ class PDFHighlight extends Component<Props> {
       this.renderPdf(n, gen)
         .catch((e) => {
           if (gen !== this.renderGen || this.isCancelled(e)) return;
-          this.pageError = this.pageError || e;
-          if (this.props.debug) console.error("[PDFHighlight] page", n, e);
+          if (this.onIdle) this.pageError = this.pageError || e; // -> onLoaded
+          else this.warnOnce(`page ${n}`, "page", n, "failed to render:", e);
         })
         .then(() => {
           if (gen !== this.renderGen) return;
           this.active.delete(n);
+          // A page that did not render is not retried in a loop.
+          if (!this.pages.has(n) && this.visible.has(n)) this.failed.add(n);
           this.pump(gen);
         });
     }
@@ -533,11 +725,32 @@ class PDFHighlight extends Component<Props> {
     if (!pdf || !div) return;
     const pagePdf = await pdf.getPage(page);
     if (gen !== this.renderGen || !this.visible.has(page)) return;
+    const { keywords = [], pageSearch, replaceTexts = [] } = this.props;
+    const needText =
+      this.props.allowHtml ||
+      replaceTexts.length > 0 ||
+      (keywords.length > 0 && (!pageSearch || pageSearch === page));
+    // Fetched alongside the render, and only when something uses it.
+    const text = needText ? this.getText(pagePdf, page) : undefined;
+    // Only a page with replacements reads its pixels back (colorsAt).
+    const readsBack =
+      text && replaceTexts.length
+        ? await text.then(
+          (tc) =>
+            this.planReplacements(
+              this.buildIndex(tc.items, this.props.specialWordRemoves || []),
+            ).length > 0,
+          () => false,
+        )
+      : false;
+    if (gen !== this.renderGen || !this.visible.has(page)) return;
+    const start = Date.now();
     const { scale = 1, allowHtml } = this.props;
     const vp1 = pagePdf.getViewport({ scale: 1 });
     const dpr = window.devicePixelRatio || 1;
+    const wanted = Math.max(scale, (this.renderedWidth / vp1.width) * dpr);
     const rasterScale = Math.min(
-      Math.max(scale, (this.renderedWidth / vp1.width) * dpr),
+      wanted,
       Math.sqrt(MAX_CANVAS_PIXELS / (vp1.width * vp1.height)),
     );
     const viewport = pagePdf.getViewport({ scale: rasterScale });
@@ -547,7 +760,8 @@ class PDFHighlight extends Component<Props> {
     const hl = document.createElement("canvas"); // highlights live here
     const found = document.createElement("canvas");
     [base, hl, found].forEach((c) => {
-      c.width = Math.floor(viewport.width);
+      // Overlays get their width (and memory) only once they draw something.
+      c.width = c === base ? Math.floor(viewport.width) : 0;
       c.height = Math.floor(viewport.height);
       c.style.display = "block";
       c.style.width = "100%";
@@ -564,8 +778,16 @@ class PDFHighlight extends Component<Props> {
     div.appendChild(hl);
     div.appendChild(found);
 
-    const ctx = base.getContext("2d");
-    if (!ctx) return;
+    // colorsAt reads replaced regions back: keep that canvas in CPU memory.
+    const ctx = base.getContext("2d", { willReadFrequently: readsBack });
+    if (!ctx) {
+      [base, hl, found].forEach((c) => {
+        c.width = 0;
+        c.height = 0;
+        c.remove();
+      });
+      throw new Error("no 2D canvas context (canvas memory limit?)");
+    }
     const entry: PageEntry = {
       pagePdf,
       div,
@@ -577,11 +799,16 @@ class PDFHighlight extends Component<Props> {
       colors: new Map(),
     };
     this.pages.set(page, entry);
-    const text = this.getText(pagePdf, page); // fetched alongside the render
     entry.task = pagePdf.render({ canvasContext: ctx, viewport });
     await Promise.all([entry.task.promise, text]);
     // Once rendered, pdf.js has loaded the PDF's own fonts, so measured text
     // (reflowed paragraphs, highlight offsets) matches the page.
+    entry.ready = true;
+    this.log?.info(this.tag, "page", page, "rendered", {
+      ms: Date.now() - start,
+      canvas: `${base.width}x${base.height}`,
+      capped: rasterScale < wanted,
+    });
     await Promise.all([
       allowHtml ? this.appendTextToCanvas(entry, page) : undefined,
       this.paintPage(page, this.paintGen),
@@ -604,7 +831,7 @@ class PDFHighlight extends Component<Props> {
   private repaintHighlights = () => {
     const paint = ++this.paintGen;
     this.pages.forEach((_, page) => {
-      this.paintPage(page, paint).catch(() => undefined);
+      this.paintPage(page, paint).catch((e) => this.fail(`paint ${page}`, e, page));
     });
   };
 
@@ -613,34 +840,86 @@ class PDFHighlight extends Component<Props> {
     const ctx = entry?.hl.getContext("2d");
     const foundCtx = entry?.found.getContext("2d");
     if (!entry || !ctx || !foundCtx) return;
-    ctx.clearRect(0, 0, entry.hl.width, entry.hl.height);
+    const {
+      keywords = [],
+      pageSearch,
+      replaceTexts = [],
+      colorHighlight,
+      isBorderHighlight,
+    } = this.props;
+    // The hl overlay (replacements, reflow) does not depend on keywords.
+    // mark() sizes borders from the canvas' CSS width: part of what hl shows.
+    const px = !isBorderHighlight
+      ? 0
+      : entry.hl.clientWidth
+        ? entry.base.width / entry.hl.clientWidth
+        : window.devicePixelRatio || 1;
+    const hlKey = `${this.textGen}|${colorHighlight}|${px}`;
+    const keepHl = !!replaceTexts.length && entry.hlKey === hlKey;
+    if (!keepHl) {
+      entry.hlKey = undefined;
+      ctx.clearRect(0, 0, entry.hl.width, entry.hl.height);
+    }
     foundCtx.clearRect(0, 0, entry.found.width, entry.found.height);
-    const { keywords = [], pageSearch, replaceTexts = [] } = this.props;
     const search = !!keywords.length && (!pageSearch || pageSearch === page);
     if (!search && !replaceTexts.length) {
       this.fitHeight(entry, 0);
+      this.own(entry, entry.hl, false);
+      this.own(entry, entry.found, false);
       return;
     }
     const tc = await this.getText(entry.pagePdf, page);
     if (paint !== this.paintGen || this.pages.get(page) !== entry) return;
     const p = this.paintOf(entry, ctx, tc);
     const removes = this.props.specialWordRemoves || [];
-    const { items, reps, flows } = this.layout(p);
+    const laid = this.layoutOf(entry, p);
+    const { items, reps, flows } = laid;
     const grow = flows.reduce((n, f) => n + f.grow, 0);
+    const height = entry.hl.height;
     this.fitHeight(entry, Math.max(0, grow));
+    const resized = this.own(entry, entry.hl, !!reps.length || !!flows.length);
+    this.own(entry, entry.found, search);
     p.dyAt = (x: number, y: number) => this.shiftOf(flows, x, y);
-    if (flows.some((f) => f.grow)) this.shiftBelow(p, flows);
-    // Replacements first, so highlights stay visible on top of them.
-    this.drawReplacements(p, reps, page);
-    flows.forEach((flow) => this.drawFlow(p, flow));
-    if (!search) return;
-    // Keywords match what is displayed, i.e. the text after replacement.
-    this.drawHighlights(
-      p,
-      this.buildIndex(items, removes, reps),
-      page,
-      this.props.keywordSolid ? foundCtx : ctx,
-    );
+    let replaced: number;
+    if (keepHl && !resized && entry.hl.height === height) {
+      replaced = reps.filter((part) => part === part.whole[0]).length;
+    } else {
+      if (flows.some((f) => f.grow)) this.shiftBelow(p, flows);
+      // Replacements first, so highlights stay visible on top of them.
+      replaced = this.drawReplacements(p, reps);
+      flows.forEach((flow) => this.drawFlow(p, flow));
+      if (entry.ready) entry.hlKey = hlKey;
+    }
+    let matches: Record<string, number> = {};
+    if (search) {
+      // Keywords match what is displayed, i.e. the text after replacement.
+      const shown =
+        laid.shown ||
+        (laid.shown =
+          !reps.length && !flows.length
+            ? laid.original
+            : this.buildIndex(items, removes, reps));
+      matches = this.drawHighlights(p, shown, foundCtx);
+      entry.lastPaint = { gen: paint, p, shown };
+      this.finishScroll(entry, page, p, shown);
+    }
+    if (Object.keys(matches).length || replaced || flows.length) {
+      this.log?.info(this.tag, "page", page, {
+        matches,
+        replaced,
+        reflowed: flows.length,
+        grownPx: Math.round(grow),
+      });
+    }
+  };
+
+  // An overlay canvas gets the page's width only while it has something to
+  // show, so an empty one holds no memory. Resizing clears it.
+  private own = (entry: PageEntry, c: HTMLCanvasElement, on: boolean) => {
+    const w = on ? entry.base.width : 0;
+    if (c.width === w) return false;
+    c.width = w;
+    return true;
   };
 
   private fitHeight = (entry: PageEntry, grow: number) => {
@@ -722,6 +1001,7 @@ class PDFHighlight extends Component<Props> {
     base: entry.base,
     colors: entry.colors,
     dyAt: () => 0,
+    metrics: new Map(),
   });
 
   // What the page shows: the PDF's items plus replaceTexts. A replacement too
@@ -736,7 +1016,7 @@ class PDFHighlight extends Component<Props> {
     const reps = this.planReplacements(original);
     const flows: Flow[] = [];
     const long = reps.filter((r) => r === r.line[0] && this.overflows(p, r));
-    if (!long.length) return { items, reps, flows };
+    if (!long.length) return { items, reps, flows, original };
     const at = new Map<Contents, number>();
     items.forEach((item, i) => at.set(item, i));
     const segs = this.segments(p);
@@ -756,7 +1036,7 @@ class PDFHighlight extends Component<Props> {
       flows.push(flow);
       mine.forEach((r) => flowed.add(r));
     });
-    if (!flows.length) return { items, reps, flows };
+    if (!flows.length) return { items, reps, flows, original };
     flows.forEach((f) => {
       f.offset = this.shiftOf(flows, f.cover[0].x + 1, f.top);
       f.items.forEach((item) => (item.dy = f.offset));
@@ -771,10 +1051,29 @@ class PDFHighlight extends Component<Props> {
         i = flow.last + 1;
       });
     while (i < items.length) shown.push(items[i++]);
-    return { items: shown, reps: reps.filter((r) => !flowed.has(r)), flows };
+    return {
+      items: shown,
+      reps: reps.filter((r) => !flowed.has(r)),
+      flows,
+      original,
+    };
+  };
+
+  // layout() depends on the text, replaceTexts and specialWordRemoves only,
+  // not on keywords: kept per page once the PDF's fonts are loaded.
+  private layoutOf = (entry: PageEntry, p: Paint): Laid => {
+    const c = entry.laid;
+    if (c && c.gen === this.textGen && c.tc === p.tc) return c;
+    const laid: Laid = { ...this.layout(p), gen: this.textGen, tc: p.tc };
+    if (entry.ready) entry.laid = laid;
+    return laid;
   };
 
   private overflows = (p: Paint, lead: ReplaceSlice) => {
+    // A replacement equal to the text it covers stays in place.
+    const bare = (t: string) => t.replace(/\s+/g, "");
+    const covered = lead.line.map((s) => s.item.str.slice(s.start, s.end));
+    if (bare(lead.text) === bare(covered.join(""))) return false;
     const b = this.lineBox(p, lead.line);
     if (!lead.text) return b.w > b.h * 0.5;
     p.ctx.save();
@@ -1238,7 +1537,7 @@ class PDFHighlight extends Component<Props> {
         const b = this.mergeBoxes(line.map((s) => this.sliceBox(p, s)));
         ctx.save();
         ctx.translate(b.tx[4], b.tx[5]);
-        this.mark(ctx, b.x0, b.y, b.w, b.h);
+        this.markReplaced(ctx, b.x0, b.y, b.w, b.h);
         ctx.restore();
       }),
     );
@@ -1269,15 +1568,29 @@ class PDFHighlight extends Component<Props> {
         const counts = new Map<number, number>();
         let paper = 2 ** 24 - 1;
         let most = 0;
-        for (let i = 0; i < data.length; i += 8) {
-          const c = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
-          const n = (counts.get(c) || 0) + 1;
-          counts.set(c, n);
+        // Runs of one color (mostly paper) are counted with one Map update.
+        let run = -1;
+        let len = 0;
+        const flush = () => {
+          if (!len) return;
+          const n = (counts.get(run) || 0) + len;
+          counts.set(run, n);
           if (n > most) {
             most = n;
-            paper = c;
+            paper = run;
           }
+        };
+        for (let i = 0; i < data.length; i += 8) {
+          const c = (data[i] << 16) | (data[i + 1] << 8) | data[i + 2];
+          if (c === run) {
+            len++;
+            continue;
+          }
+          flush();
+          run = c;
+          len = 1;
         }
+        flush();
         const diff = (c: number) =>
           [16, 8, 0].reduce(
             (d, s) => d + Math.abs(((c >> s) & 255) - ((paper >> s) & 255)),
@@ -1345,35 +1658,59 @@ class PDFHighlight extends Component<Props> {
 
   // Box of item.str[start, end). Browser widths are scaled onto the exact PDF
   // advance (item.width); `track` is the extra spacing per char the PDF adds.
-  private sliceBox = (p: Paint, { item, start, end }: Slice): Box => {
+  // Per item, once per paint: its canvas transform, font and PDF advance.
+  private metricsOf = (p: Paint, item: Contents): ItemMetrics => {
+    let m = p.metrics.get(item);
+    if (m) return m;
     const { Util } = this.lib;
     const style = p.tc.styles[item.fontName];
     const tx: number[] = Util.transform(p.viewport.transform, item.transform);
     const fontH = Math.hypot(tx[2], tx[3]);
-    const asc =
-      style && Number.isFinite(style.ascent) && style.ascent > 0
-        ? style.ascent
-        : 0.8;
-    const desc =
-      style && Number.isFinite(style.descent) && style.descent < 0
-        ? style.descent
-        : -0.2;
     const font = this.fontOf(p, item, fontH);
     p.ctx.font = font;
     const target = item.width * p.viewport.scale;
-    const full = p.ctx.measureText(item.str).width || 1;
-    const k = target / full;
-    const x0 = p.ctx.measureText(item.str.slice(0, start)).width * k;
-    const x1 = p.ctx.measureText(item.str.slice(0, end)).width * k;
-    return {
+    const raw = p.ctx.measureText(item.str).width;
+    const full = raw || 1;
+    m = {
       tx,
       angle: Math.atan2(tx[1], tx[0]),
+      fontH,
+      asc:
+        style && Number.isFinite(style.ascent) && style.ascent > 0
+          ? style.ascent
+          : 0.8,
+      desc:
+        style && Number.isFinite(style.descent) && style.descent < 0
+          ? style.descent
+          : -0.2,
+      font,
+      raw,
+      k: target / full,
+      track: (target - full) / Math.max(1, item.str.length),
+    };
+    p.metrics.set(item, m);
+    return m;
+  };
+
+  // Box of item.str[start, end). Browser widths are scaled onto the exact PDF
+  // advance (item.width); `track` is the extra spacing per char the PDF adds.
+  private sliceBox = (p: Paint, { item, start, end }: Slice): Box => {
+    const m = this.metricsOf(p, item);
+    p.ctx.font = m.font;
+    const x0 = start > 0 ? p.ctx.measureText(item.str.slice(0, start)).width * m.k : 0;
+    const x1 =
+      end >= item.str.length
+        ? m.raw * m.k
+        : p.ctx.measureText(item.str.slice(0, end)).width * m.k;
+    return {
+      tx: m.tx,
+      angle: m.angle,
       x0,
       w: x1 - x0,
-      y: -asc * fontH,
-      h: (asc - desc) * fontH,
-      font,
-      track: (target - full) / Math.max(1, item.str.length),
+      y: -m.asc * m.fontH,
+      h: (m.asc - m.desc) * m.fontH,
+      font: m.font,
+      track: m.track,
     };
   };
 
@@ -1454,20 +1791,9 @@ class PDFHighlight extends Component<Props> {
     return { ...b, x0, w: x1 - x0 };
   };
 
-  private drawReplacements = (
-    p: Paint,
-    parts: ReplaceSlice[],
-    page: number,
-  ) => {
+  // Returns how many matches were replaced in place.
+  private drawReplacements = (p: Paint, parts: ReplaceSlice[]) => {
     const { ctx } = p;
-    if (this.props.debug && parts.length) {
-      console.info(
-        "[PDFHighlight] page",
-        page,
-        "replaced slices",
-        parts.length,
-      );
-    }
     parts.forEach((part) => {
       if (part !== part.line[0]) return; // drawn once per visual line
       ctx.save();
@@ -1491,36 +1817,62 @@ class PDFHighlight extends Component<Props> {
         ctx.restore();
         // Replaced text is marked like a keyword match.
         if (part.rule.highlight !== false) {
-          this.mark(ctx, b.x0, b.y, ctx.measureText(part.text).width * k, b.h);
+          this.markReplaced(
+            ctx,
+            b.x0,
+            b.y,
+            ctx.measureText(part.text).width * k,
+            b.h,
+          );
         }
       }
       ctx.restore();
     });
+    return parts.filter((part) => part === part.whole[0]).length;
   };
 
-  // One highlight box in the current transform: a translucent fill, or a
-  // border with isBorderHighlight.
+  // A solid fill (drawn multiplied), or a border with isBorderHighlight.
   private mark = (
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
     w: number,
     h: number,
-    color?: string,
-    solid?: boolean,
+    color: string,
   ) => {
-    const { isBorderHighlight } = this.props;
-    const colorHighlight = color || this.props.colorHighlight || "yellow";
     ctx.save();
-    if (isBorderHighlight) {
-      ctx.strokeStyle = colorHighlight;
-      ctx.lineWidth = 1;
+    if (this.props.isBorderHighlight) {
+      // 2 screen px, whatever the canvas resolution.
+      const { canvas } = ctx;
+      const px = canvas.clientWidth
+        ? canvas.width / canvas.clientWidth
+        : window.devicePixelRatio || 1;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2 * px;
       ctx.strokeRect(x, y, w, h);
     } else {
-      ctx.fillStyle = colorHighlight;
-      ctx.globalAlpha = solid ? 1 : 0.2;
+      ctx.fillStyle = color;
       ctx.fillRect(x, y, w, h);
     }
+    ctx.restore();
+  };
+
+  private keywordColor = () =>
+    this.props.colorKeyword || this.props.colorHighlight || "yellow";
+
+  private replaceColor = () => this.props.colorHighlight || "yellow";
+
+  // Solid and multiplied onto the replaced text, so its ink stays dark.
+  private markReplaced = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ) => {
+    ctx.save();
+    if (!this.props.isBorderHighlight) ctx.globalCompositeOperation = "multiply";
+    this.mark(ctx, x, y, w, h, this.replaceColor());
     ctx.restore();
   };
 
@@ -1593,62 +1945,262 @@ class PDFHighlight extends Component<Props> {
     return Math.max(from, Math.min(text.length, target));
   };
 
-  private drawHighlights = (
-    p: Paint,
-    index: PageIndex,
-    page: number,
-    ctx: CanvasRenderingContext2D,
-  ) => {
+  private needles = () => {
     const {
       keywords = [],
       specialWordRemoves = [],
       maxKeywordLength = 2000,
-      debug,
     } = this.props;
-    const needles = Array.from(
+    return Array.from(
       new Set(
         keywords.map((k) =>
           this.normalizeNeedle(k, specialWordRemoves, maxKeywordLength),
         ),
       ),
-    ).filter(Boolean); // drops whitespace-only keywords
-    for (const needle of needles) {
-      const matches = this.findAll(index, needle, this.props.ignoreCase);
-      if (debug) {
-        console.info(
-          "[PDFHighlight] page",
-          page,
-          "matches",
-          matches.length,
-          needle,
-        );
+    ).filter(Boolean);
+  };
+
+  private firstMatch = (index: PageIndex) => {
+    let first: [number, number] | undefined;
+    this.needles().forEach((needle) => {
+      const [m] = this.findAll(index, needle);
+      if (m && (!first || m[0] < first[0])) first = m;
+    });
+    return first;
+  };
+
+  // What firstMatch reads (the lowercased shown text), kept per page so a
+  // keystroke does not rebuild every page's index.
+  private shownText = (page: number, tc: TextContent) => {
+    let lower = this.searchText.get(page);
+    if (lower === undefined) {
+      lower = this.shownIndex(tc).lower;
+      this.searchText.set(page, lower);
+    }
+    return { lower } as PageIndex;
+  };
+
+  private shownIndex = (tc: TextContent) => {
+    const removes = this.props.specialWordRemoves || [];
+    const original = this.buildIndex(tc.items, removes);
+    const reps = this.planReplacements(original);
+    return reps.length ? this.buildIndex(tc.items, removes, reps) : original;
+  };
+
+  private hitBox = (
+    p: Paint,
+    index: PageIndex,
+    s: Slice & { rep: number },
+  ): Box => {
+    const b =
+      s.rep < 0
+        ? this.sliceBox(p, s)
+        : this.replacedBox(p, index.reps[s.rep], s.start, s.end);
+    const dy = (s.item as Item).dy ?? p.dyAt(b.tx[4], b.tx[5]);
+    const tx = b.tx.slice();
+    tx[5] += dy;
+    return { ...b, tx };
+  };
+
+  private matchBox = (
+    p: Paint,
+    index: PageIndex,
+    line: (Slice & { rep: number })[],
+  ): Box => this.mergeBoxes(line.map((s) => this.hitBox(p, index, s)));
+
+  // Replaced text that carries its own highlight mark.
+  private onMarkedReplacement = (
+    index: PageIndex,
+    s: Slice & { rep: number },
+  ) => {
+    const rule = s.rep >= 0 ? index.reps[s.rep].rule : (s.item as Item).rule;
+    return !!rule && rule.highlight !== false;
+  };
+
+  // Jumps near the first match, then refines onto its highlight once the page
+  // is painted. Resolves false when nothing matches or the pages are still
+  // being laid out (the search then runs after layout).
+  scrollToMatch = async (): Promise<boolean> => {
+    const req = ++this.scrollReq;
+    this.pendingScroll = undefined;
+    await undefined; // let a state update made just before render first
+    if (req !== this.scrollReq || !this.needles().length) return false;
+    const pdf = this.pdf;
+    if (!pdf || !this.slots.size) {
+      this.scrollOnLayout = true;
+      return false;
+    }
+    const { pageSearch } = this.props;
+    const nums = Array.from(this.slots.keys()).filter(
+      (n) => !pageSearch || n === pageSearch,
+    );
+    try {
+      let slice = Date.now();
+      for (const n of nums) {
+        // Cached text resolves as microtasks: yield so typing stays smooth.
+        if (Date.now() - slice > 8) {
+          await new Promise((r) => setTimeout(r));
+          slice = Date.now();
+        }
+        const pagePdf = await pdf.getPage(n);
+        const tc = await this.getText(pagePdf, n);
+        if (req !== this.scrollReq) return false;
+        const match = this.firstMatch(this.shownText(n, tc));
+        if (!match) continue;
+        const index = this.shownIndex(tc);
+        this.pendingScroll = { page: n, req };
+        const entry = this.pages.get(n);
+        const last = entry && entry.lastPaint;
+        if (entry && entry.ready && last && last.gen === this.paintGen) {
+          this.finishScroll(entry, n, last.p, last.shown);
+        } else if (entry && entry.ready) {
+          this.paintPage(n, this.paintGen).catch((e) =>
+            this.fail(`paint ${n}`, e, n),
+          );
+        } else {
+          this.scrollMarker(n, this.roughRect(pagePdf, index, match));
+        }
+        this.log?.info(this.tag, "scroll to page", n, entry ? "" : "(rendering)");
+        return true;
       }
+      this.log?.info(this.tag, "no match");
+    } catch (e) {
+      if (this.pdf === pdf) this.fail("search", e); // not a released document
+    }
+    return false;
+  };
+
+  private roughRect = (
+    pagePdf: any,
+    index: PageIndex,
+    [from, to]: [number, number],
+  ): Rect => {
+    const [s] = this.slices(index, from, to);
+    const vp1 = pagePdf.getViewport({ scale: 1 });
+    const tx: number[] = this.lib.Util.transform(vp1.transform, s.item.transform);
+    const size = Math.hypot(tx[2], tx[3]);
+    const len = Math.max(1, s.item.str.length);
+    const width = s.item.width || size;
+    const r = this.rectOf({
+      tx,
+      angle: Math.atan2(tx[1], tx[0]),
+      x0: (width * Math.min(s.start, len)) / len,
+      w: (width * Math.max(1, Math.min(s.end, len) - s.start)) / len,
+      y: -size,
+      h: size,
+      font: "",
+      track: 0,
+    });
+    return {
+      x: r.x / vp1.width,
+      y: r.y / vp1.height,
+      w: r.w / vp1.width,
+      h: r.h / vp1.height,
+    };
+  };
+
+  private cancelScroll = () => {
+    ++this.scrollReq;
+    this.pendingScroll = undefined;
+  };
+
+  private finishScroll = (
+    entry: PageEntry,
+    page: number,
+    p: Paint,
+    index: PageIndex,
+  ) => {
+    const pending = this.pendingScroll;
+    if (!pending || pending.page !== page || !entry.ready) return;
+    this.pendingScroll = undefined;
+    if (pending.req !== this.scrollReq) return;
+    const match = this.firstMatch(index);
+    if (!match) return;
+    const [line] = this.lines(this.slices(index, match[0], match[1]));
+    const r = this.rectOf(this.matchBox(p, index, line));
+    const width = entry.base.width; // hl may hold no pixels (width 0)
+    const height = entry.hl.height;
+    this.scrollMarker(page, {
+      x: r.x / width,
+      y: r.y / height,
+      w: r.w / width,
+      h: r.h / height,
+    });
+  };
+
+  // Jumps straight there, like a browser's find.
+  private scrollMarker = (page: number, target: Rect) => {
+    const slot = this.slots.get(page);
+    if (!slot) return;
+    const x = Math.min(1, Math.max(0, target.x));
+    const y = Math.min(1, Math.max(0, target.y));
+    const marker = this.marker || (this.marker = document.createElement("div"));
+    marker.style.cssText =
+      "position:absolute;visibility:hidden;pointer-events:none";
+    marker.style.left = `${x * 100}%`;
+    marker.style.top = `${y * 100}%`;
+    marker.style.width = `${Math.max(0, Math.min(target.w, 1 - x)) * 100}%`;
+    marker.style.height = `${Math.max(0, Math.min(target.h, 1 - y)) * 100}%`;
+    if (marker.parentNode !== slot) slot.appendChild(marker);
+    const wrap = this.refCanvasWrap;
+    if (wrap && wrap.scrollHeight > wrap.clientHeight) {
+      // Scroll only the wrapper, not the page around it.
+      const m = marker.getBoundingClientRect();
+      const c = wrap.getBoundingClientRect();
+      const top =
+        wrap.scrollTop +
+        m.top -
+        c.top -
+        wrap.clientTop -
+        (wrap.clientHeight - m.height) / 2;
+      wrap.scrollTop = top;
+    } else if (marker.scrollIntoView) {
+      marker.scrollIntoView({ block: "center", inline: "nearest" });
+    }
+  };
+
+  // Returns the match count per keyword that matched (for debug output).
+  private drawHighlights = (
+    p: Paint,
+    index: PageIndex,
+    ctx: CanvasRenderingContext2D,
+  ) => {
+    const counts: Record<string, number> = {};
+    const color = this.keywordColor();
+    // Over replaced text marked in the same color the match would not show:
+    // that part is drawn darker.
+    const strong =
+      !this.props.isBorderHighlight &&
+      normColor(color) === normColor(this.replaceColor())
+        ? darker(color)
+        : undefined;
+    const draw = (b: Box, c: string) => {
+      ctx.save();
+      ctx.translate(b.tx[4], b.tx[5]);
+      ctx.rotate(b.angle);
+      this.mark(ctx, b.x0, b.y, b.w, b.h, c);
+      ctx.restore();
+    };
+    for (const needle of this.needles()) {
+      const matches = this.findAll(index, needle);
+      if (matches.length) counts[needle.slice(0, 40)] = matches.length;
       for (const [from, to] of matches) {
         for (const line of this.lines(this.slices(index, from, to))) {
-          const b = this.mergeBoxes(
-            line.map((s) =>
-              s.rep < 0
-                ? this.sliceBox(p, s)
-                : this.replacedBox(p, index.reps[s.rep], s.start, s.end),
-            ),
-          );
-          const dy = (line[0].item as Item).dy ?? p.dyAt(b.tx[4], b.tx[5]);
-          ctx.save();
-          ctx.translate(b.tx[4], b.tx[5] + dy);
-          ctx.rotate(b.angle);
-          this.mark(
-            ctx,
-            b.x0,
-            b.y,
-            b.w,
-            b.h,
-            this.props.colorKeyword,
-            this.props.keywordSolid,
-          );
-          ctx.restore();
+          draw(this.matchBox(p, index, line), color);
+          if (!strong) continue;
+          // Consecutive pieces on marked replaced text, one band each.
+          const runs: (Slice & { rep: number })[][] = [];
+          line.forEach((s, i) => {
+            if (!this.onMarkedReplacement(index, s)) return;
+            const prev = runs[runs.length - 1];
+            if (prev && this.onMarkedReplacement(index, line[i - 1])) prev.push(s);
+            else runs.push([s]);
+          });
+          runs.forEach((run) => draw(this.matchBox(p, index, run), strong));
         }
       }
     }
+    return counts;
   };
 
   // Whitespace-free page text plus a map from each char back to its source:
@@ -1659,29 +2211,31 @@ class PDFHighlight extends Component<Props> {
     removes: string[],
     reps: ReplaceSlice[] = [],
   ): PageIndex => {
-    const chars: string[] = [];
+    let text = "";
     const item: number[] = [];
     const off: number[] = [];
     const rep: number[] = [];
     const clean = (s: string) => {
       removes.forEach((r) => {
-        if (r) s = s.split(r).join(" ".repeat(r.length)); // keep offsets
+        if (r && s.includes(r)) s = s.split(r).join(" ".repeat(r.length)); // keep offsets
       });
       return s;
     };
     const add = (s: string, i: number, r: number, from: number, to: number) => {
       for (let j = from; j < to; j++) {
-        if (/\s/.test(s[j])) continue;
-        chars.push(s[j]);
+        if (isSpace(s.charCodeAt(j))) continue;
+        text += s[j];
         item.push(i);
         off.push(j);
         rep.push(r);
       }
     };
     const repsOf = new Map<Contents, number[]>();
-    reps.forEach((r, n) =>
-      repsOf.set(r.item, (repsOf.get(r.item) || []).concat(n)),
-    );
+    reps.forEach((r, n) => {
+      const mine = repsOf.get(r.item);
+      if (mine) mine.push(n);
+      else repsOf.set(r.item, [n]);
+    });
     items.forEach((it, i) => {
       const s = clean(it.str || "");
       let pos = 0;
@@ -1695,7 +2249,7 @@ class PDFHighlight extends Component<Props> {
         });
       add(s, i, -1, pos, s.length);
     });
-    return { text: chars.join(""), item, off, rep, items, reps };
+    return { text, lower: lowerChars(text), item, off, rep, items, reps };
   };
 
   private normalizeNeedle = (
@@ -1710,20 +2264,15 @@ class PDFHighlight extends Component<Props> {
     return k.replace(/\s+/g, "").slice(0, max || 2000);
   };
 
-  private findAll = (
-    idx: PageIndex,
-    needle: string,
-    ignoreCase?: boolean,
-  ): [number, number][] => {
+  // Case-insensitive, like a browser's find.
+  private findAll = (idx: PageIndex, needle: string): [number, number][] => {
     const out: [number, number][] = [];
     if (!needle) return out;
-    const text = ignoreCase ? idx.text.toLocaleLowerCase("vi") : idx.text;
-    const find = ignoreCase ? needle.toLocaleLowerCase("vi") : needle;
-    if (text.length !== idx.text.length) return this.findAll(idx, needle);
-    let p = text.indexOf(find);
+    const find = lowerChars(needle);
+    let p = idx.lower.indexOf(find);
     while (p !== -1) {
       out.push([p, p + find.length]);
-      p = text.indexOf(find, p + find.length);
+      p = idx.lower.indexOf(find, p + find.length);
     }
     return out;
   };
@@ -1765,7 +2314,7 @@ class PDFHighlight extends Component<Props> {
     const { styles } = tc;
     const vp1 = entry.vp1;
     // Selected/copied text is what is displayed: replaced and reflowed.
-    const { items, reps } = this.layout(this.paintOf(entry, ctx, tc));
+    const { items, reps } = this.layoutOf(entry, this.paintOf(entry, ctx, tc));
     const edits = new Map<Contents, ReplaceSlice[]>();
     reps.forEach((r) => edits.set(r.item, (edits.get(r.item) || []).concat(r)));
     const layer = document.createElement("div");
